@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set version
         shell: pwsh
@@ -72,14 +72,16 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "dist/topaz-pan.iss"
 
       - name: Upload Windows VST3 zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-windows-vst3
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-windows-vst3.zip
           if-no-files-found: error
 
+      # Upload the raw installer file. GitHub wraps artifacts in its own archive,
+      # but we do not create an additional zip around the .exe itself.
       - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-windows-installer
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-windows-installer.exe
@@ -90,7 +92,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set version
         run: |
@@ -163,21 +165,23 @@ jobs:
             "dist"
 
       - name: Upload macOS VST3 zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-macos-vst3
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-macos-vst3.zip
           if-no-files-found: error
 
       - name: Upload macOS AU zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-macos-au
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-macos-au.zip
           if-no-files-found: error
 
+      # Upload the raw installer file. GitHub wraps artifacts in its own archive,
+      # but we do not create an additional zip around the .pkg itself.
       - name: Upload macOS installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-macos-installer
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-macos-installer.pkg
