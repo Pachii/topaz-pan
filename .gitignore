@@ -45,3 +45,4 @@ Thumbs.db
 # Logs and Temps
 *.log
 /tmp/
+.cache/
