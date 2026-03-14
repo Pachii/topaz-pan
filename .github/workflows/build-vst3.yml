@@ -20,11 +20,29 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --target AbstractWidener_VST3
 
+      - name: Collect Windows VST3
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          $candidates = @(
+            "build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3",
+            "build/AbstractWidener_artefacts/VST3/topaz pan.vst3"
+          )
+
+          $source = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $source) {
+            Write-Error "Could not find built Windows VST3 artifact."
+          }
+
+          Copy-Item -Recurse -Force $source "dist/topaz pan.vst3"
+
       - name: Upload Windows VST3
         uses: actions/upload-artifact@v4
         with:
           name: topaz-pan-windows-vst3
-          path: build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3
+          path: dist/topaz pan.vst3
           if-no-files-found: error
 
   build-macos-vst3:
@@ -40,16 +58,55 @@ jobs:
       - name: Build VST3 and AU
         run: cmake --build build --config Release --target AbstractWidener_VST3 AbstractWidener_AU
 
+      - name: Collect macOS plugin formats
+        run: |
+          mkdir -p dist
+
+          vst3_src=""
+          for candidate in \
+            "build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3" \
+            "build/AbstractWidener_artefacts/VST3/topaz pan.vst3"
+          do
+            if [ -e "$candidate" ]; then
+              vst3_src="$candidate"
+              break
+            fi
+          done
+
+          au_src=""
+          for candidate in \
+            "build/AbstractWidener_artefacts/Release/AU/topaz pan.component" \
+            "build/AbstractWidener_artefacts/AU/topaz pan.component"
+          do
+            if [ -e "$candidate" ]; then
+              au_src="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$vst3_src" ]; then
+            echo "Could not find built macOS VST3 artifact." >&2
+            exit 1
+          fi
+
+          if [ -z "$au_src" ]; then
+            echo "Could not find built macOS AU artifact." >&2
+            exit 1
+          fi
+
+          cp -R "$vst3_src" "dist/topaz pan.vst3"
+          cp -R "$au_src" "dist/topaz pan.component"
+
       - name: Upload macOS VST3
         uses: actions/upload-artifact@v4
         with:
           name: topaz-pan-macos-vst3
-          path: build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3
+          path: dist/topaz pan.vst3
           if-no-files-found: error
 
       - name: Upload macOS AU
         uses: actions/upload-artifact@v4
         with:
           name: topaz-pan-macos-au
-          path: build/AbstractWidener_artefacts/Release/AU/topaz pan.component
+          path: dist/topaz pan.component
           if-no-files-found: error
