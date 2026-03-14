@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        margin: 24px;
+        color: #1e2f36;
+      }
+
+      h1 {
+        font-size: 24px;
+        margin: 0 0 12px 0;
+      }
+
+      p {
+        font-size: 13px;
+        line-height: 1.5;
+        margin: 0 0 10px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>topaz pan @DISPLAY_VERSION@</h1>
+    <p>This installer will install or update topaz pan to the latest version on this Mac.</p>
+    <p>On the next screen, choose whether you want to install the AU, the VST3, or both plugin formats.</p>
+  </body>
+</html>

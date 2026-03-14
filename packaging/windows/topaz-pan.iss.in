@@ -1,0 +1,33 @@
+#define MyAppName "topaz pan"
+#define MyAppVersion "@DISPLAY_VERSION@"
+#define MyAppPublisher "topaz"
+#define MyAppURL "https://github.com/Pachii/topaz-pan"
+#define MyVst3Source "@VST3_SOURCE@"
+
+[Setup]
+AppId={{7FDF5ED4-07C2-4FA4-BC6E-A5EBA2C9B2CF}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}/releases
+DefaultDirName={commoncf64}\VST3
+DisableDirPage=yes
+DisableProgramGroupPage=yes
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+Compression=lzma
+SolidCompression=yes
+WizardStyle=modern
+OutputDir=@OUTPUT_DIR@
+OutputBaseFilename=topaz-pan-@DISPLAY_VERSION@-windows-installer
+PrivilegesRequired=admin
+UninstallDisplayName={#MyAppName}
+
+[Messages]
+WelcomeLabel2=This installer will install or update topaz pan to the latest version on your system.
+
+[Files]
+Source: "{#MyVst3Source}\*"; DestDir: "{commoncf64}\VST3\topaz pan.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs

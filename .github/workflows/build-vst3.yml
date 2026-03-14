@@ -7,7 +7,7 @@ on:
       - "v*"
 
 jobs:
-  build-windows-vst3:
+  build-windows:
     runs-on: windows-latest
 
     steps:
@@ -19,14 +19,20 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           if (-not $version -or $version -eq "main") {
-            $version = "v0.1.0-alpha"
+            $content = Get-Content "PluginProcessor.h" -Raw
+            $match = [regex]::Match($content, 'getVersionTag\(\)\s*\{\s*return\s*"([^"]+)"')
+            if (-not $match.Success) {
+              throw "Could not determine plugin version from PluginProcessor.h"
+            }
+            $version = $match.Groups[1].Value
           }
+
           "PLUGIN_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure
         run: cmake -S . -B build
 
-      - name: Build
+      - name: Build Windows VST3
         run: cmake --build build --config Release --target AbstractWidener_VST3
 
       - name: Collect Windows VST3
@@ -42,20 +48,44 @@ jobs:
           $source = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 
           if (-not $source) {
-            Write-Error "Could not find built Windows VST3 artifact."
+            throw "Could not find built Windows VST3 artifact."
           }
 
           Copy-Item -Recurse -Force $source "dist/topaz pan.vst3"
           Compress-Archive -Path "dist/topaz pan.vst3" -DestinationPath "dist/topaz-pan-$env:PLUGIN_VERSION-windows-vst3.zip" -Force
 
-      - name: Upload Windows VST3
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $template = Get-Content "packaging/windows/topaz-pan.iss.in" -Raw
+          $vst3Source = (Resolve-Path "dist/topaz pan.vst3").Path.Replace('\', '\\')
+          $outputDir = (Resolve-Path "dist").Path.Replace('\', '\\')
+          $script = $template.Replace("@DISPLAY_VERSION@", $env:PLUGIN_VERSION)
+          $script = $script.Replace("@VST3_SOURCE@", $vst3Source)
+          $script = $script.Replace("@OUTPUT_DIR@", $outputDir)
+          Set-Content -Path "dist/topaz-pan.iss" -Value $script
+
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "dist/topaz-pan.iss"
+
+      - name: Upload Windows VST3 zip
         uses: actions/upload-artifact@v4
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-windows-vst3
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-windows-vst3.zip
           if-no-files-found: error
 
-  build-macos-vst3:
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: topaz-pan-${{ env.PLUGIN_VERSION }}-windows-installer
+          path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-windows-installer.exe
+          if-no-files-found: error
+
+  build-macos:
     runs-on: macos-latest
 
     steps:
@@ -66,14 +96,20 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           if [ -z "$version" ] || [ "$version" = "main" ]; then
-            version="v0.1.0-alpha"
+            version="$(sed -n 's/.*getVersionTag() { return "\(.*\)"; }.*/\1/p' PluginProcessor.h | head -n 1)"
           fi
+
+          if [ -z "$version" ]; then
+            echo "Could not determine plugin version from PluginProcessor.h" >&2
+            exit 1
+          fi
+
           echo "PLUGIN_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Configure
         run: cmake -S . -B build
 
-      - name: Build VST3 and AU
+      - name: Build macOS VST3 and AU
         run: cmake --build build --config Release --target AbstractWidener_VST3 AbstractWidener_AU
 
       - name: Collect macOS plugin formats
@@ -117,16 +153,32 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "dist/topaz pan.vst3" "dist/topaz-pan-${PLUGIN_VERSION}-macos-vst3.zip"
           ditto -c -k --sequesterRsrc --keepParent "dist/topaz pan.component" "dist/topaz-pan-${PLUGIN_VERSION}-macos-au.zip"
 
-      - name: Upload macOS VST3
+      - name: Build macOS installer
+        run: |
+          chmod +x packaging/macos/build-installer.sh
+          packaging/macos/build-installer.sh \
+            "${PLUGIN_VERSION}" \
+            "dist/topaz pan.vst3" \
+            "dist/topaz pan.component" \
+            "dist"
+
+      - name: Upload macOS VST3 zip
         uses: actions/upload-artifact@v4
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-macos-vst3
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-macos-vst3.zip
           if-no-files-found: error
 
-      - name: Upload macOS AU
+      - name: Upload macOS AU zip
         uses: actions/upload-artifact@v4
         with:
           name: topaz-pan-${{ env.PLUGIN_VERSION }}-macos-au
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-macos-au.zip
+          if-no-files-found: error
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: topaz-pan-${{ env.PLUGIN_VERSION }}-macos-installer
+          path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-macos-installer.pkg
           if-no-files-found: error

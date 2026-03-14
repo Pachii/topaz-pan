@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <title>topaz pan @DISPLAY_VERSION@</title>
+    <organization>com.topaz</organization>
+    <options customize="always" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <welcome file="welcome.html" mime-type="text/html"/>
+
+    <choices-outline>
+        <line choice="choice-vst3"/>
+        <line choice="choice-au"/>
+    </choices-outline>
+
+    <choice id="choice-vst3" title="vst3" description="Install or update the VST3 plugin in /Library/Audio/Plug-Ins/VST3." start_selected="true">
+        <pkg-ref id="com.topaz.topaz-pan.vst3"/>
+    </choice>
+
+    <choice id="choice-au" title="au" description="Install or update the Audio Unit plugin in /Library/Audio/Plug-Ins/Components." start_selected="true">
+        <pkg-ref id="com.topaz.topaz-pan.au"/>
+    </choice>
+
+    <pkg-ref id="com.topaz.topaz-pan.vst3" version="@PKG_VERSION@" onConclusion="none">topaz-pan-vst3.pkg</pkg-ref>
+    <pkg-ref id="com.topaz.topaz-pan.au" version="@PKG_VERSION@" onConclusion="none">topaz-pan-au.pkg</pkg-ref>
+</installer-gui-script>
