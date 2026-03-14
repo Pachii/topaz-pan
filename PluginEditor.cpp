@@ -6,6 +6,8 @@ constexpr int sliderTextBoxWidth = 52;
 constexpr int sliderTextBoxHeight = 20;
 constexpr int unitLabelGap = 6;
 constexpr int unitLabelWidth = 26;
+constexpr int titleAreaHeight = 54;
+constexpr float titleAreaHorizontalPadding = 4.0f;
 
 double clampDisplayedZero(double value, double threshold) {
   return std::abs(value) < threshold ? 0.0 : value;
@@ -34,7 +36,276 @@ juce::String formatHaasPercent(double value) {
 juce::String formatOutputDb(double value) {
   return juce::String(clampDisplayedZero(value, 0.05), 1);
 }
+
+double smoothStep(double t) {
+  t = juce::jlimit(0.0, 1.0, t);
+  return t * t * (3.0 - 2.0 * t);
+}
+
+double mapSegment(double value, double start, double end, double outStart,
+                  double outEnd, double (*easing)(double)) {
+  if (end <= start)
+    return outEnd;
+
+  const double t = juce::jlimit(0.0, 1.0, (value - start) / (end - start));
+  return juce::jmap(easing(t), outStart, outEnd);
+}
 } // namespace
+
+class TitleComponent : public juce::Component {
+public:
+  explicit TitleComponent(VocalWidenerProcessor &processorRef)
+      : processor(processorRef) {
+    setInterceptsMouseClicks(false, false);
+  }
+
+  void paint(juce::Graphics &g) override {
+    auto bounds = getLocalBounds().toFloat();
+    g.reduceClipRegion(bounds.getSmallestIntegerContainer());
+
+    const auto titleState = computeTitleState(bounds);
+    auto font = juce::Font("Helvetica Neue", 32.0f * titleState.scale,
+                           juce::Font::bold);
+    const juce::String topazWord = titleState.allCaps ? "TOPAZ" : "topaz";
+    const juce::String panWord = titleState.allCaps ? "PAN" : "pan";
+
+    const float wordTopazWidth =
+        measureTrackedWord(topazWord, font, titleState.letterTracking);
+    const float wordPanWidth =
+        measureTrackedWord(panWord, font, titleState.letterTracking);
+
+    const float contentWidth =
+        wordTopazWidth + titleState.wordGap + wordPanWidth;
+    const float startX = bounds.getX() + titleAreaHorizontalPadding;
+    const float baselineY =
+        bounds.getCentreY() - (font.getHeight() * 0.5f) + font.getAscent();
+
+    const juce::Rectangle<float> clipBounds(startX, bounds.getY(), contentWidth,
+                                            bounds.getHeight());
+    g.reduceClipRegion(clipBounds.getSmallestIntegerContainer());
+
+    drawWordWithEffects(g, topazWord, startX, baselineY, font, titleState);
+    drawWordWithEffects(g, panWord, startX + wordTopazWidth + titleState.wordGap,
+                        baselineY, font, titleState);
+  }
+
+private:
+  struct TitleState {
+    float wordGap = 0.0f;
+    float letterTracking = 0.0f;
+    float chromaOffset = 0.0f;
+    float chromaAlpha = 0.0f;
+    float scale = 1.0f;
+    bool allCaps = false;
+  };
+
+  struct ParameterInfo {
+    float min = 0.0f;
+    float max = 1.0f;
+    float value = 0.0f;
+    float defaultValue = 0.0f;
+  };
+
+  ParameterInfo getParameterInfo(const juce::String &parameterId) const {
+    auto range = processor.apvts.getParameterRange(parameterId);
+    ParameterInfo info;
+    info.min = range.start;
+    info.max = range.end;
+    info.value = juce::jlimit(info.min, info.max,
+                              processor.apvts.getRawParameterValue(parameterId)
+                                  ->load(std::memory_order_relaxed));
+
+    if (auto *parameter = processor.apvts.getParameter(parameterId))
+      info.defaultValue = range.convertFrom0to1(parameter->getDefaultValue());
+    else
+      info.defaultValue = info.value;
+
+    return info;
+  }
+
+  TitleState computeTitleState(juce::Rectangle<float> bounds) const {
+    TitleState state;
+
+    const auto outputGain = getParameterInfo("outGain");
+    const auto offset = getParameterInfo("offsetTime");
+    const auto pitch = getParameterInfo("pitchDiff");
+    const auto leftPanAmount = getParameterInfo("leftPan");
+    const auto rightPanAmount = getParameterInfo("rightPan");
+    const bool flipPan =
+        processor.flipPanParam->load(std::memory_order_relaxed) > 0.5f;
+
+    state.scale = mapOutputScale(outputGain);
+    state.allCaps =
+        outputGain.value >= (outputGain.max -
+                             juce::jmax(0.0001f, (outputGain.max - outputGain.min) * 0.001f));
+    state.letterTracking =
+        mapLetterTracking(leftPanAmount.value, rightPanAmount.value, flipPan,
+                          state.scale);
+
+    auto font = juce::Font("Helvetica Neue", 32.0f * state.scale,
+                           juce::Font::bold);
+    const juce::String topazWord = state.allCaps ? "TOPAZ" : "topaz";
+    const juce::String panWord = state.allCaps ? "PAN" : "pan";
+    const float topazWidth =
+        measureTrackedWord(topazWord, font, state.letterTracking);
+    const float panWidth =
+        measureTrackedWord(panWord, font, state.letterTracking);
+    state.wordGap =
+        mapWordGap(offset, font, bounds.getWidth(), topazWidth, panWidth);
+
+    const float pitchNorm =
+        pitch.max > pitch.min
+            ? juce::jlimit(0.0f, 1.0f,
+                           (pitch.value - pitch.min) / (pitch.max - pitch.min))
+            : 0.0f;
+    const float pitchEase = static_cast<float>(std::pow(pitchNorm, 0.32f));
+    state.chromaOffset = 5.8f * pitchEase;
+    state.chromaAlpha = 0.68f * pitchEase;
+
+    return state;
+  }
+
+  float mapOutputScale(const ParameterInfo &outputGain) const {
+    if (outputGain.value >= outputGain.defaultValue) {
+      const float positiveRange =
+          juce::jmax(0.001f, outputGain.max - outputGain.defaultValue);
+      const float t =
+          (outputGain.value - outputGain.defaultValue) / positiveRange;
+      const float eased =
+          static_cast<float>((0.2 * t) + (0.8 * smoothStep(t)));
+      return 1.0f + 0.22f * eased;
+    }
+
+    const float negativeRange =
+        juce::jmax(0.001f, outputGain.defaultValue - outputGain.min);
+    const float t = (outputGain.defaultValue - outputGain.value) / negativeRange;
+    return 1.0f - 0.09f * static_cast<float>(smoothStep(t));
+  }
+
+  float mapLetterTracking(float leftPanAmount, float rightPanAmount,
+                          bool flipPan, float scale) const {
+    juce::ignoreUnused(flipPan);
+
+    const float leftPan = -(leftPanAmount / 100.0f);
+    const float rightPan = rightPanAmount / 100.0f;
+    const float spreadNorm =
+        juce::jlimit(0.0f, 1.0f, std::abs(rightPan - leftPan) * 0.5f);
+    const float compression =
+        static_cast<float>(std::pow(1.0f - spreadNorm, 2.35f));
+    return -2.35f * scale * compression;
+  }
+
+  float mapWordGap(const ParameterInfo &offset, juce::Font font, float areaWidth,
+                   float topazWidth, float panWidth) const {
+    const float spaceWidth =
+        juce::jmax(8.0f, font.getStringWidthFloat(" ") * 0.95f);
+    const float maxGap = juce::jmax(
+        spaceWidth,
+        (areaWidth - (2.0f * titleAreaHorizontalPadding) - topazWidth - panWidth) *
+            0.97f);
+    const float compressedGap = juce::jmin(spaceWidth * 0.06f, maxGap);
+    const float balancedGap = juce::jmin(spaceWidth * 0.9f, maxGap);
+    const float stableGap =
+        juce::jmin(juce::jmax(balancedGap, balancedGap + (maxGap - balancedGap) * 0.025f),
+                   maxGap);
+    const float minimumGap = 0.0f;
+
+    const double min = offset.min;
+    const double max = offset.max;
+    const double defaultValue = juce::jlimit(min, max, static_cast<double>(offset.defaultValue));
+    const double midpoint = juce::jmap(0.5, min, defaultValue);
+    const double balancedEnd =
+        defaultValue + ((max - defaultValue) * 0.25);
+    const double value = juce::jlimit(min, max, static_cast<double>(offset.value));
+
+    if (value <= midpoint)
+      return static_cast<float>(mapSegment(value, min, midpoint, minimumGap,
+                                           compressedGap, [](double t) {
+                                             return std::pow(t, 4.2);
+                                           }));
+    if (value <= defaultValue)
+      return static_cast<float>(mapSegment(value, midpoint, defaultValue,
+                                           compressedGap, balancedGap,
+                                           [](double t) {
+                                             return std::pow(t, 1.8);
+                                           }));
+    if (value <= balancedEnd)
+      return static_cast<float>(mapSegment(value, defaultValue, balancedEnd,
+                                           balancedGap, stableGap,
+                                           [](double t) {
+                                             return t * t * (3.0 - (2.0 * t));
+                                           }));
+
+    return static_cast<float>(mapSegment(value, balancedEnd, max, stableGap,
+                                         maxGap, [](double t) {
+                                           return (0.24 * t) +
+                                                  (0.76 * std::pow(t, 2.4));
+                                         }));
+  }
+
+  float measureTrackedWord(const juce::String &word, juce::Font font,
+                           float tracking) const {
+    float cursorX = 0.0f;
+    float lastGlyphWidth = 0.0f;
+
+    for (int i = 0; i < word.length(); ++i) {
+      const juce::String glyph = juce::String::charToString(word[i]);
+      const float glyphWidth = font.getStringWidthFloat(glyph);
+      lastGlyphWidth = glyphWidth;
+
+      if (i < word.length() - 1)
+        cursorX += computeAdvance(glyphWidth, tracking);
+    }
+
+    return cursorX + lastGlyphWidth;
+  }
+
+  float computeAdvance(float glyphWidth, float tracking) const {
+    return juce::jmax(glyphWidth * 0.58f, glyphWidth + tracking);
+  }
+
+  void drawWordWithEffects(juce::Graphics &g, const juce::String &word,
+                           float x, float baselineY, juce::Font font,
+                           const TitleState &state) const {
+    const auto mainColour = juce::Colours::white;
+
+    if (state.chromaAlpha > 0.0f) {
+      drawTrackedWord(g, word, x - state.chromaOffset, baselineY, font,
+                      juce::Colour::fromFloatRGBA(1.0f, 0.36f, 0.52f,
+                                                  state.chromaAlpha),
+                      state.letterTracking);
+      drawTrackedWord(g, word, x + state.chromaOffset, baselineY, font,
+                      juce::Colour::fromFloatRGBA(0.34f, 0.92f, 1.0f,
+                                                  state.chromaAlpha),
+                      state.letterTracking);
+    }
+
+    drawTrackedWord(g, word, x, baselineY, font, mainColour, state.letterTracking);
+  }
+
+  void drawTrackedWord(juce::Graphics &g, const juce::String &word, float x,
+                       float baselineY, juce::Font font, juce::Colour colour,
+                       float tracking) const {
+    g.setColour(colour);
+    g.setFont(font);
+
+    float cursorX = x;
+
+    for (int i = 0; i < word.length(); ++i) {
+      const juce::String glyph = juce::String::charToString(word[i]);
+      const float glyphWidth = font.getStringWidthFloat(glyph);
+      g.drawText(glyph,
+                 juce::Rectangle<float>(cursorX, baselineY - font.getAscent(),
+                                        glyphWidth + 4.0f, font.getHeight()),
+                 juce::Justification::centredLeft, false);
+
+      if (i < word.length() - 1)
+        cursorX += computeAdvance(glyphWidth, tracking);
+    }
+  }
+
+  VocalWidenerProcessor &processor;
+};
 
 //==============================================================================
 CustomLookAndFeel::CustomLookAndFeel() {
@@ -118,6 +389,8 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g,
 VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
     : AudioProcessorEditor(&p), audioProcessor(p) {
   setLookAndFeel(&customLookAndFeel);
+  titleComponent = std::make_unique<TitleComponent>(audioProcessor);
+  addAndMakeVisible(*titleComponent);
   setSize(430, 580);
 
   auto setupSlider = [&](juce::Slider &s, juce::Label &l,
@@ -297,6 +570,7 @@ void VocalWidenerEditor::timerCallback() {
 
   updateHaasCompVisualState(effectiveHaasEnabled);
   updatePanUnitLabels(flipPan);
+  titleComponent->repaint();
 
   float oDel = audioProcessor.leftDelayReadout.load(std::memory_order_relaxed);
   float dDel = audioProcessor.rightDelayReadout.load(std::memory_order_relaxed);
@@ -368,11 +642,6 @@ void VocalWidenerEditor::paint(juce::Graphics &g) {
         0, 0, getWidth(), 30, juce::Justification::centred, true);
   }
 
-  g.setColour(juce::Colours::white);
-  g.setFont(juce::Font("Helvetica Neue", 32.0f, juce::Font::bold));
-  g.drawText("topaz pan", 30, 25, getWidth() - 60, 40,
-             juce::Justification::left, true);
-
   g.setColour(juce::Colours::white.withAlpha(0.5f));
   g.setFont(juce::Font("Helvetica Neue", 12.0f, juce::Font::plain));
   g.drawText("0.1.0-alpha", getWidth() - 110, getHeight() - 30, 100, 20,
@@ -380,6 +649,9 @@ void VocalWidenerEditor::paint(juce::Graphics &g) {
 }
 
 void VocalWidenerEditor::resized() {
+  if (titleComponent != nullptr)
+    titleComponent->setBounds(30, 20, getWidth() - 60, titleAreaHeight);
+
   int yStart = 90;
   int labelW = 100;
   int sliderW = 210;

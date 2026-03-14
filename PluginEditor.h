@@ -57,6 +57,8 @@ public:
     }
 };
 
+class TitleComponent;
+
 //==============================================================================
 /**
 */
@@ -89,6 +91,7 @@ private:
 
     juce::Label offsetLabel, leftPanLabel, rightPanLabel, pitchDiffLabel, outGainLabel, haasCompAmtLabel;
     juce::Label offsetUnitLabel, leftPanUnitLabel, rightPanUnitLabel, pitchDiffUnitLabel, haasCompAmtUnitLabel, outGainUnitLabel;
+    std::unique_ptr<TitleComponent> titleComponent;
     
     // Dynamic readouts
     juce::Label leftReadout, rightReadout, haasReadout;
