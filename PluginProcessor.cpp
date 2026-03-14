@@ -76,7 +76,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VocalWidenerProcessor::creat
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("rightPan", 1), "right pan", -1.0f, 1.0f, 1.0f));
     params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID("centeredTiming", 1), "equal delay", false));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("pitchDiff", 1), "pitch difference", 
-        juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 0.0f, 
+        juce::NormalisableRange<float>(0.0f, 20.0f, 0.01f), 0.0f, 
         juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(v, 2); })));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID("outGain", 1), "output gain", 
         juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f,
