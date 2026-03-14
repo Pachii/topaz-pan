@@ -43,6 +43,20 @@ private:
     }
 };
 
+class MirroredSlider : public ShiftSlider
+{
+public:
+    double proportionOfLengthToValue(double proportion) override
+    {
+        return ShiftSlider::proportionOfLengthToValue(1.0 - proportion);
+    }
+
+    double valueToProportionOfLength(double value) override
+    {
+        return 1.0 - ShiftSlider::valueToProportionOfLength(value);
+    }
+};
+
 //==============================================================================
 /**
 */
@@ -58,19 +72,23 @@ public:
     void timerCallback() override;
 
 private:
+    void updateHaasCompVisualState(bool enabled);
+    void updatePanUnitLabels(bool flipPan);
+
     VocalWidenerProcessor& audioProcessor;
 
     CustomLookAndFeel customLookAndFeel;
     juce::TooltipWindow tooltipWindow { this, 700 };
 
-    ShiftSlider offsetSlider, leftPanSlider, rightPanSlider, pitchDiffSlider, outGainSlider, haasCompAmtSlider;
-    juce::ToggleButton centeredToggle {"equal delay"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, haasCompToggle {"haas comp"};
+    ShiftSlider offsetSlider, rightPanSlider, pitchDiffSlider, outGainSlider, haasCompAmtSlider;
+    MirroredSlider leftPanSlider;
+    juce::ToggleButton centeredToggle {"equal delay"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, flipPanToggle {"flip pan"}, haasCompToggle {"haas comp"};
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attOffset, attLeftPan, attRightPan, attPitchDiff, attOutGain, attHaasAmt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attBypass, attLinkPan, attHaasEn;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attBypass, attLinkPan, attFlipPan, attHaasEn;
 
     juce::Label offsetLabel, leftPanLabel, rightPanLabel, pitchDiffLabel, outGainLabel, haasCompAmtLabel;
-    juce::Label offsetUnitLabel, pitchDiffUnitLabel, haasCompAmtUnitLabel, outGainUnitLabel;
+    juce::Label offsetUnitLabel, leftPanUnitLabel, rightPanUnitLabel, pitchDiffUnitLabel, haasCompAmtUnitLabel, outGainUnitLabel;
     
     // Dynamic readouts
     juce::Label leftReadout, rightReadout, haasReadout;

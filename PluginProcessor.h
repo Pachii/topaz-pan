@@ -164,6 +164,7 @@ public:
     std::atomic<float>* outputGainParam = nullptr;
     std::atomic<float>* bypassParam = nullptr;
     std::atomic<float>* linkPanParam = nullptr;
+    std::atomic<float>* flipPanParam = nullptr;
     std::atomic<float>* haasCompEnableParam = nullptr;
     std::atomic<float>* haasCompAmtParam = nullptr;
 

@@ -23,6 +23,10 @@ juce::String formatPitchCents(double value) {
   return juce::String(clampDisplayedZero(value, 0.005), 2);
 }
 
+juce::String formatPanAmount(double value) {
+  return juce::String(juce::roundToInt(clampDisplayedZero(value, 0.5)));
+}
+
 juce::String formatHaasPercent(double value) {
   return juce::String(juce::roundToInt(clampDisplayedZero(value, 0.5)));
 }
@@ -58,15 +62,21 @@ void CustomLookAndFeel::drawTooltip(juce::Graphics &g, const juce::String &text,
 void CustomLookAndFeel::drawLinearSlider(
     juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
     float /*minSliderPos*/, float /*maxSliderPos*/,
-    const juce::Slider::SliderStyle /*style*/, juce::Slider & /*slider*/) {
+    const juce::Slider::SliderStyle /*style*/, juce::Slider &slider) {
   g.setColour(juce::Colour::fromString("#40FFFFFF"));
   float trackH = 2.0f;
   float trackY = y + height * 0.5f - trackH * 0.5f;
   g.fillRoundedRectangle(x, trackY, width, trackH, 1.0f);
 
-  float fillW = sliderPos - x;
   g.setColour(juce::Colours::white);
-  g.fillRoundedRectangle(x, trackY, fillW, trackH, 1.0f);
+  if (slider.getProperties().getWithDefault("mirrorFill", false)) {
+    float fillX = juce::jlimit(static_cast<float>(x), static_cast<float>(x + width),
+                               sliderPos);
+    g.fillRoundedRectangle(fillX, trackY, (x + width) - fillX, trackH, 1.0f);
+  } else {
+    float fillW = sliderPos - x;
+    g.fillRoundedRectangle(x, trackY, fillW, trackH, 1.0f);
+  }
 
   g.fillEllipse(sliderPos - 6.0f, y + height * 0.5f - 6.0f, 12.0f, 12.0f);
 }
@@ -151,13 +161,28 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   setupUnitLabel(offsetUnitLabel, "ms");
 
   setupSlider(leftPanSlider, leftPanLabel, "left pan", attLeftPan, "leftPan");
-  leftPanLabel.setTooltip("pans the left channel in the stereo field");
+  leftPanSlider.getProperties().set("mirrorFill", true);
+  leftPanLabel.setTooltip("sets how far left the left voice sits");
+  leftPanSlider.textFromValueFunction = [](double value) {
+    return formatPanAmount(value);
+  };
+  leftPanSlider.valueFromTextFunction = [](const juce::String &text) {
+    return parseNumericValue(text);
+  };
+  setupUnitLabel(leftPanUnitLabel, "L");
 
   setupSlider(rightPanSlider, rightPanLabel, "right pan", attRightPan,
               "rightPan");
-  rightPanLabel.setTooltip("pans the right channel in the stereo field");
+  rightPanLabel.setTooltip("sets how far right the right voice sits");
+  rightPanSlider.textFromValueFunction = [](double value) {
+    return formatPanAmount(value);
+  };
+  rightPanSlider.valueFromTextFunction = [](const juce::String &text) {
+    return parseNumericValue(text);
+  };
+  setupUnitLabel(rightPanUnitLabel, "R");
 
-  setupSlider(pitchDiffSlider, pitchDiffLabel, "pitch difference", attPitchDiff,
+  setupSlider(pitchDiffSlider, pitchDiffLabel, "pitch shift", attPitchDiff,
               "pitchDiff");
   pitchDiffLabel.setTooltip("adds subtle pitch separation between channels");
   pitchDiffSlider.textFromValueFunction = [](double value) {
@@ -203,9 +228,16 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
           audioProcessor.apvts, "bypass", bypassToggle);
 
   addAndMakeVisible(linkPanToggle);
+  linkPanToggle.setTooltip("locks both pan amounts together");
   attLinkPan =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "linkPan", linkPanToggle);
+
+  addAndMakeVisible(flipPanToggle);
+  flipPanToggle.setTooltip("swaps the left and right pan destinations");
+  attFlipPan =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          audioProcessor.apvts, "flipPan", flipPanToggle);
 
   addAndMakeVisible(haasCompToggle);
   attHaasEn =
@@ -224,14 +256,47 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   rightReadout.setColour(juce::Label::textColourId, juce::Colours::white);
   haasReadout.setColour(juce::Label::textColourId, juce::Colours::white);
 
+  updateHaasCompVisualState(
+      audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
+      audioProcessor.linkPanParam->load(std::memory_order_relaxed) > 0.5f);
+  updatePanUnitLabels(
+      audioProcessor.flipPanParam->load(std::memory_order_relaxed) > 0.5f);
+
   startTimerHz(30);
 }
 
 VocalWidenerEditor::~VocalWidenerEditor() { setLookAndFeel(nullptr); }
 
+void VocalWidenerEditor::updateHaasCompVisualState(bool enabled) {
+  const float activeAlpha = 1.0f;
+  const float disabledAlpha = 0.4f;
+  const float alpha = enabled ? activeAlpha : disabledAlpha;
+
+  haasCompAmtSlider.setEnabled(enabled);
+  haasCompAmtSlider.setAlpha(alpha);
+  haasCompAmtLabel.setAlpha(alpha);
+  haasCompAmtUnitLabel.setAlpha(alpha);
+}
+
+void VocalWidenerEditor::updatePanUnitLabels(bool flipPan) {
+  leftPanUnitLabel.setText(flipPan ? "R" : "L", juce::dontSendNotification);
+  rightPanUnitLabel.setText(flipPan ? "L" : "R", juce::dontSendNotification);
+}
+
 void VocalWidenerEditor::timerCallback() {
   if (!audioProcessor.isStereoLayout)
     return; // Banner will cover UI
+
+  const bool haasEnabled =
+      audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f;
+  const bool linkPanEnabled =
+      audioProcessor.linkPanParam->load(std::memory_order_relaxed) > 0.5f;
+  const bool effectiveHaasEnabled = haasEnabled && linkPanEnabled;
+  const bool flipPan =
+      audioProcessor.flipPanParam->load(std::memory_order_relaxed) > 0.5f;
+
+  updateHaasCompVisualState(effectiveHaasEnabled);
+  updatePanUnitLabels(flipPan);
 
   float oDel = audioProcessor.leftDelayReadout.load(std::memory_order_relaxed);
   float dDel = audioProcessor.rightDelayReadout.load(std::memory_order_relaxed);
@@ -248,11 +313,11 @@ void VocalWidenerEditor::timerCallback() {
     dPit = 0.0f;
 
   leftReadout.setText(
-      juce::String::formatted("left channel:\ndelay: %+.2f ms\npitch: %.2f c",
+      juce::String::formatted("left channel:\ndelay: %+.2f ms\npitch: %+.2f c",
                               oDel, oPit),
       juce::dontSendNotification);
   rightReadout.setText(
-      juce::String::formatted("right channel:\ndelay: %+.2f ms\npitch: %.2f c",
+      juce::String::formatted("right channel:\ndelay: %+.2f ms\npitch: %+.2f c",
                               dDel, dPit),
       juce::dontSendNotification);
 
@@ -266,8 +331,16 @@ void VocalWidenerEditor::timerCallback() {
   if (std::abs(dComp) < 0.05f)
     dComp = 0.0f;
 
+  const bool hasDirectionalPrecedence =
+      earlierPath == 0.0f || earlierPath == 1.0f;
+  const bool hasAudibleHaasGain = oComp != 0.0f || dComp != 0.0f;
+
   juce::String precStr = "haas precedence: ";
-  if (earlierPath == 0.0f)
+  if (!effectiveHaasEnabled)
+    precStr += "off";
+  else if (!hasDirectionalPrecedence && !hasAudibleHaasGain)
+    precStr += "none";
+  else if (earlierPath == 0.0f)
     precStr += "left";
   else if (earlierPath == 1.0f)
     precStr += "right";
@@ -275,7 +348,7 @@ void VocalWidenerEditor::timerCallback() {
     precStr += "ambiguous";
 
   auto formatCompDb = [](float v) {
-    return juce::String(std::abs(v) < 0.05f ? 0.0f : v, 1);
+    return juce::String(std::abs(v) < 0.005f ? 0.0f : v, 2);
   };
   precStr += "\nleft gain: " + formatCompDb(oComp) +
              " dB   |   right gain: " + formatCompDb(dComp) + " dB";
@@ -302,7 +375,7 @@ void VocalWidenerEditor::paint(juce::Graphics &g) {
 
   g.setColour(juce::Colours::white.withAlpha(0.5f));
   g.setFont(juce::Font("Helvetica Neue", 12.0f, juce::Font::plain));
-  g.drawText("0.1 alpha", getWidth() - 90, getHeight() - 30, 80, 20,
+  g.drawText("0.1.0-alpha", getWidth() - 110, getHeight() - 30, 100, 20,
              juce::Justification::right, true);
 }
 
@@ -321,10 +394,12 @@ void VocalWidenerEditor::resized() {
 
   leftPanLabel.setBounds(leftMargin, yStart, labelW, rowH);
   leftPanSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
+  leftPanUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
   yStart += rowH;
 
   rightPanLabel.setBounds(leftMargin, yStart, labelW, rowH);
   rightPanSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
+  rightPanUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
   yStart += rowH;
 
   pitchDiffLabel.setBounds(leftMargin, yStart, labelW, rowH);
@@ -349,8 +424,11 @@ void VocalWidenerEditor::resized() {
   linkPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
   yStart += colH;
 
-  haasCompToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  bypassToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+  flipPanToggle.setBounds(leftMargin, yStart, colWidth, colH);
+  haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+  yStart += colH;
+
+  bypassToggle.setBounds(leftMargin, yStart, colWidth, colH);
   yStart += colH + 20;
 
   leftReadout.setBounds(leftMargin, yStart, 180, 50);

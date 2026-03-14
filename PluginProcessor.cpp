@@ -19,6 +19,7 @@ VocalWidenerProcessor::VocalWidenerProcessor()
   outputGainParam = apvts.getRawParameterValue("outGain");
   bypassParam = apvts.getRawParameterValue("bypass");
   linkPanParam = apvts.getRawParameterValue("linkPan");
+  flipPanParam = apvts.getRawParameterValue("flipPan");
   haasCompEnableParam = apvts.getRawParameterValue("haasCompEn");
   haasCompAmtParam = apvts.getRawParameterValue("haasCompAmt");
 
@@ -44,15 +45,15 @@ void VocalWidenerProcessor::parameterChanged(const juce::String &parameterID,
   if (linked) {
     if (parameterID == "leftPan") {
       if (auto *p = apvts.getParameter("rightPan"))
-        p->setValueNotifyingHost(p->convertTo0to1(-newValue));
+        p->setValueNotifyingHost(p->convertTo0to1(newValue));
     } else if (parameterID == "rightPan") {
       if (auto *p = apvts.getParameter("leftPan"))
-        p->setValueNotifyingHost(p->convertTo0to1(-newValue));
+        p->setValueNotifyingHost(p->convertTo0to1(newValue));
     } else if (parameterID == "linkPan") {
       if (auto *pLeft = apvts.getParameter("leftPan"))
         if (auto *pRight = apvts.getParameter("rightPan")) {
           float leftVal = pLeft->convertFrom0to1(pLeft->getValue());
-          pRight->setValueNotifyingHost(pRight->convertTo0to1(-leftVal));
+          pRight->setValueNotifyingHost(pRight->convertTo0to1(leftVal));
         }
     }
   }
@@ -68,13 +69,19 @@ VocalWidenerProcessor::createParameterLayout() {
       juce::ParameterID("offsetTime", 1), "offset time", 0.0f, maxOffsetMs,
       10.0f));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID("leftPan", 1), "left pan", -1.0f, 1.0f, -1.0f));
+      juce::ParameterID("leftPan", 1), "left pan",
+      juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f), 100.0f,
+      juce::AudioParameterFloatAttributes().withStringFromValueFunction(
+          [](float v, int) { return juce::String(juce::roundToInt(v)); })));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID("rightPan", 1), "right pan", -1.0f, 1.0f, 1.0f));
+      juce::ParameterID("rightPan", 1), "right pan",
+      juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f), 100.0f,
+      juce::AudioParameterFloatAttributes().withStringFromValueFunction(
+          [](float v, int) { return juce::String(juce::roundToInt(v)); })));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID("centeredTiming", 1), "equal delay", false));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID("pitchDiff", 1), "pitch difference",
+      juce::ParameterID("pitchDiff", 1), "pitch shift",
       juce::NormalisableRange<float>(0.0f, 20.0f, 0.01f), 0.0f,
       juce::AudioParameterFloatAttributes().withStringFromValueFunction(
           [](float v, int) { return juce::String(v, 2); })));
@@ -89,6 +96,8 @@ VocalWidenerProcessor::createParameterLayout() {
       juce::ParameterID("bypass", 1), "bypass", false));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID("linkPan", 1), "link pan", true));
+  params.push_back(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID("flipPan", 1), "flip pan", false));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID("haasCompEn", 1), "haas comp", false));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -155,8 +164,35 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   float gainLinear = juce::Decibels::decibelsToGain(
       outputGainParam->load(std::memory_order_relaxed));
 
-  float leftPan = leftPanParam->load(std::memory_order_relaxed);
-  float rightPan = rightPanParam->load(std::memory_order_relaxed);
+  const float leftPanAmount =
+      juce::jlimit(0.0f, 100.0f, leftPanParam->load(std::memory_order_relaxed));
+  const float rightPanAmount = juce::jlimit(
+      0.0f, 100.0f, rightPanParam->load(std::memory_order_relaxed));
+  const bool flipPan = flipPanParam->load(std::memory_order_relaxed) > 0.5f;
+
+  const float panDirection = flipPan ? 1.0f : -1.0f;
+  float leftPan = panDirection * (leftPanAmount / 100.0f);
+  float rightPan = -panDirection * (rightPanAmount / 100.0f);
+
+  // Equal-power pan coefficients.
+  // Math: left = cos((pan+1) * pi/4), right = sin((pan+1) * pi/4)
+  const float leftPL =
+      std::cos((leftPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
+  const float leftPR =
+      std::sin((leftPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
+  const float rightPL =
+      std::cos((rightPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
+  const float rightPR =
+      std::sin((rightPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
+
+  // Practical Haas heuristic: scale the gain compensation by the actual
+  // left/right separation created by the equal-power panners. This makes the
+  // compensation collapse toward zero as both voices approach the center.
+  const float leftBalance = leftPR - leftPL;
+  const float rightBalance = rightPR - rightPL;
+  const float panSeparationWeight =
+      juce::jlimit(0.0f, 1.0f, std::abs(rightBalance - leftBalance) * 0.5f);
+  const bool hasMeaningfulPanSeparation = panSeparationWeight >= 0.03f;
 
   const int targetLatencySamples = computeLatencySamples(offsetMs, centered);
   if (targetLatencySamples != activeLatencySamples) {
@@ -191,7 +227,10 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   pitchRight.setPitchOffsetCents(detuneRightCents);
 
   // Precedence Compensation
-  bool haasEnable = haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f;
+  const bool linkPanEnabled =
+      linkPanParam->load(std::memory_order_relaxed) > 0.5f;
+  bool haasEnable = haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
+                    linkPanEnabled;
   float haasAmtNorm =
       haasCompAmtParam->load(std::memory_order_relaxed) / 100.0f;
 
@@ -201,13 +240,14 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   if (haasEnable) {
     float deltaMs = std::abs(delayTLeftMs - delayTRightMs);
-    if (deltaMs > 0.1f) // Only correct if noticeably different
+    if (deltaMs > 0.1f &&
+        hasMeaningfulPanSeparation) // Only correct if noticeably different
     {
       // Exponential saturation model (tau = 8.0f)
       float factor = 1.0f - std::exp(-deltaMs / 8.0f);
 
       // Hardcoded max dB = 2.0f
-      float compDb = factor * haasAmtNorm * 2.0f;
+      float compDb = factor * haasAmtNorm * 2.0f * panSeparationWeight;
 
       if (delayTLeftMs < delayTRightMs) {
         // Left structure is earlier
@@ -234,18 +274,6 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   earlierPathReadout.store(earlierPath, std::memory_order_relaxed);
   leftCompReadout.store(targetLeftCompDb, std::memory_order_relaxed);
   rightCompReadout.store(targetRightCompDb, std::memory_order_relaxed);
-
-  // Equal-power Pan coefficients
-  // Math: left = cos((pan+1) * pi/4), right = sin((pan+1) * pi/4)
-  float leftPL =
-      std::cos((leftPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
-  float leftPR =
-      std::sin((leftPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
-
-  float rightPL =
-      std::cos((rightPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
-  float rightPR =
-      std::sin((rightPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f);
 
   auto *channelL = buffer.getWritePointer(0);
   auto *channelR = buffer.getWritePointer(1);
