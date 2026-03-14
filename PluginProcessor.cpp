@@ -130,8 +130,8 @@ void VocalWidenerProcessor::prepareToPlay(double sampleRate,
   isStereoLayout =
       (getTotalNumInputChannels() == 2 && getTotalNumOutputChannels() == 2);
 
-  delayLeft.prepare(sampleRate, maxOffsetMs);
-  delayRight.prepare(sampleRate, maxOffsetMs);
+  delayLeft.prepare(sampleRate, maxCenteredRightDelayMs);
+  delayRight.prepare(sampleRate, maxCenteredRightDelayMs);
   pitchLeft.prepare(sampleRate, pitchWindowMs);
   pitchRight.prepare(sampleRate, pitchWindowMs);
 

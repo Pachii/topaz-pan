@@ -89,6 +89,7 @@ namespace dsp_utils
     public:
         void prepare(double sampleRate, float maxDelayMs = 100.0f) {
             fs = sampleRate;
+            maxDelayMsPrepared = juce::jmax(0.0f, maxDelayMs);
             buffer.setSize(1, static_cast<int>((maxDelayMs * fs) / 1000.0) + 10);
             buffer.clear();
             writePos = 0;
@@ -96,7 +97,9 @@ namespace dsp_utils
             targetDelayMs = 0.0f;
         }
 
-        void setTargetDelayMs(float ms) { targetDelayMs = ms; }
+        void setTargetDelayMs(float ms) {
+            targetDelayMs = juce::jlimit(0.0f, maxDelayMsPrepared, ms);
+        }
 
         float processSample(float in) {
             auto* writePtr = buffer.getWritePointer(0);
@@ -109,7 +112,10 @@ namespace dsp_utils
             writePtr[writePos] = in;
 
             float readPos = static_cast<float>(writePos) - delaySamples;
-            if (readPos < 0.0f) readPos += static_cast<float>(bufferSize);
+            while (readPos < 0.0f)
+                readPos += static_cast<float>(bufferSize);
+            while (readPos >= static_cast<float>(bufferSize))
+                readPos -= static_cast<float>(bufferSize);
 
             int idx1 = static_cast<int>(readPos);
             int idx2 = (idx1 + 1) % bufferSize;
@@ -125,6 +131,7 @@ namespace dsp_utils
         juce::AudioBuffer<float> buffer;
         int writePos = 0;
         double fs = 44100.0;
+        float maxDelayMsPrepared = 0.0f;
         float currentDelayMs = 0.0f, targetDelayMs = 0.0f;
     };
 } // namespace dsp_utils
@@ -198,6 +205,7 @@ public:
 
 private:
     static constexpr float maxOffsetMs = 50.0f;
+    static constexpr float maxCenteredRightDelayMs = maxOffsetMs * 1.5f;
     static constexpr float pitchWindowMs = 30.0f;
     static constexpr float pitchLatencyMs = pitchWindowMs * 0.5f;
     static constexpr float maxReportedLatencyMs = pitchLatencyMs + (maxOffsetMs * 0.5f);
