@@ -17,6 +17,8 @@ FetchContent_MakeAvailable(juce)
 # Create the plugin target
 # ==============================================================================
 juce_add_plugin(AbstractWidener
+    COMPANY_NAME              "topaz"
+    BUNDLE_ID                 "com.topaz.topaz-pan"
     PLUGIN_MANUFACTURER_CODE  "Anti"
     PLUGIN_CODE               "Widn"
     FORMATS                   VST3 AU Standalone

@@ -22,6 +22,8 @@ namespace dsp_utils
         void setPitchOffsetCents(float cents) {
             if (std::abs(cents) < 0.01f) {
                 deltaPhase = 0.0;
+                // Zero cents should always land on the neutral half-window read.
+                phase = 0.0;
             } else {
                 double speedRatio = std::pow(2.0, cents / 1200.0);
                 deltaPhase = (1.0 - speedRatio) / windowSamples;
@@ -49,6 +51,12 @@ namespace dsp_utils
             auto getTriangleGain = [](double p) {
                 return static_cast<float>(p < 0.5 ? 2.0 * p : 2.0 * (1.0 - p));
             };
+
+            if (std::abs(deltaPhase) < 1.0e-9) {
+                const float out = readInterp(0.5);
+                writePos = (writePos + 1) % bufferSize;
+                return out;
+            }
 
             double phase2 = std::fmod(phase + 0.5, 1.0);
             
@@ -137,6 +145,10 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
     const juce::String getName() const override { return "Vocal Widener"; }
+    static juce::String getVersionTag() { return "v0.1.0-alpha"; }
+    static juce::URL getReleasesPageUrl() { return juce::URL("https://github.com/Pachii/topaz-pan/releases"); }
+    static juce::URL getLatestReleaseApiUrl() { return juce::URL("https://api.github.com/repos/Pachii/topaz-pan/releases/latest"); }
+    float getReportedLatencyMs() const;
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -160,6 +172,7 @@ public:
     std::atomic<float>* leftPanParam = nullptr;
     std::atomic<float>* rightPanParam = nullptr;
     std::atomic<float>* centeredTimingParam = nullptr;
+    std::atomic<float>* equalPitchShiftParam = nullptr;
     std::atomic<float>* pitchDiffParam = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
     std::atomic<float>* bypassParam = nullptr;

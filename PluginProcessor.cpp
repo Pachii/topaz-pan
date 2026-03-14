@@ -15,6 +15,7 @@ VocalWidenerProcessor::VocalWidenerProcessor()
   leftPanParam = apvts.getRawParameterValue("leftPan");
   rightPanParam = apvts.getRawParameterValue("rightPan");
   centeredTimingParam = apvts.getRawParameterValue("centeredTiming");
+  equalPitchShiftParam = apvts.getRawParameterValue("equalPitchShift");
   pitchDiffParam = apvts.getRawParameterValue("pitchDiff");
   outputGainParam = apvts.getRawParameterValue("outGain");
   bypassParam = apvts.getRawParameterValue("bypass");
@@ -79,7 +80,9 @@ VocalWidenerProcessor::createParameterLayout() {
       juce::AudioParameterFloatAttributes().withStringFromValueFunction(
           [](float v, int) { return juce::String(juce::roundToInt(v)); })));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
-      juce::ParameterID("centeredTiming", 1), "equal delay", false));
+      juce::ParameterID("centeredTiming", 1), "equal delay", true));
+  params.push_back(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID("equalPitchShift", 1), "equal pitch shift", false));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("pitchDiff", 1), "pitch shift",
       juce::NormalisableRange<float>(0.0f, 20.0f, 0.01f), 0.0f,
@@ -99,7 +102,7 @@ VocalWidenerProcessor::createParameterLayout() {
   params.push_back(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID("flipPan", 1), "flip pan", false));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
-      juce::ParameterID("haasCompEn", 1), "haas comp", false));
+      juce::ParameterID("haasCompEn", 1), "haas comp", true));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("haasCompAmt", 1), "haas comp amount",
       juce::NormalisableRange<float>(0.0f, 200.0f, 1.0f), 100.0f,
@@ -159,6 +162,8 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // Load parameters (Realtime safe)
   float offsetMs = offsetTimeParam->load(std::memory_order_relaxed);
   bool centered = centeredTimingParam->load(std::memory_order_relaxed) > 0.5f;
+  bool equalPitchShift =
+      equalPitchShiftParam->load(std::memory_order_relaxed) > 0.5f;
   bool bypassed = bypassParam->load(std::memory_order_relaxed) > 0.5f;
   float pDiff = pitchDiffParam->load(std::memory_order_relaxed);
   float gainLinear = juce::Decibels::decibelsToGain(
@@ -215,8 +220,8 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   float leftReadoutMs = centered ? -(offsetMs * 0.5f) : 0.0f;
   float rightReadoutMs = centered ? (offsetMs * 0.5f) : offsetMs;
 
-  float detuneLeftCents = -(pDiff * 0.5f);
-  float detuneRightCents = (pDiff * 0.5f);
+  float detuneLeftCents = equalPitchShift ? -(pDiff * 0.5f) : 0.0f;
+  float detuneRightCents = equalPitchShift ? (pDiff * 0.5f) : pDiff;
 
   // Update readouts for UI
   leftDelayReadout.store(leftReadoutMs, std::memory_order_relaxed);
@@ -327,6 +332,22 @@ int VocalWidenerProcessor::computeLatencySamples(float offsetMs,
       pitchLatencyMs + (centered ? (offsetMs * 0.5f) : 0.0f);
   return juce::roundToInt(
       (totalLatencyMs * static_cast<float>(currentSampleRate)) / 1000.0f);
+}
+
+float VocalWidenerProcessor::getReportedLatencyMs() const {
+  if (currentSampleRate <= 0.0)
+    return 0.0f;
+
+  const float offsetMs =
+      offsetTimeParam != nullptr ? offsetTimeParam->load(std::memory_order_relaxed)
+                                 : 0.0f;
+  const bool centered =
+      centeredTimingParam != nullptr &&
+      centeredTimingParam->load(std::memory_order_relaxed) > 0.5f;
+  const int latencySamples = computeLatencySamples(offsetMs, centered);
+
+  return (static_cast<float>(latencySamples) * 1000.0f) /
+         static_cast<float>(currentSampleRate);
 }
 
 void VocalWidenerProcessor::queueLatencyUpdate(int latencySamples) {

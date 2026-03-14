@@ -14,11 +14,24 @@ public:
                            
     void drawToggleButton (juce::Graphics&, juce::ToggleButton&, 
                            bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+    juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
+    void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
+                               bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&,
+                         bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+    void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown,
+                       int buttonX, int buttonY, int buttonW, int buttonH,
+                       juce::ComboBox&) override;
+    juce::Font getComboBoxFont (juce::ComboBox&) override;
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
                            
     juce::Font getLabelFont (juce::Label&) override;
     juce::Label* createSliderTextBox (juce::Slider&) override;
     
     void drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height) override;
+    void drawCallOutBoxBackground (juce::CallOutBox&, juce::Graphics&, const juce::Path&, juce::Image&) override;
+    int getCallOutBoxBorderSize (const juce::CallOutBox&) override;
+    float getCallOutBoxCornerSize (const juce::CallOutBox&) override;
 };
 
 class ShiftSlider : public juce::Slider
@@ -70,12 +83,15 @@ public:
 
     //==============================================================================
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     void timerCallback() override;
 
 private:
     void updateHaasCompVisualState(bool enabled);
     void updatePanUnitLabels(bool flipPan);
+    void showSettingsPopup();
+    void setSettingsVisible(bool visible);
 
     VocalWidenerProcessor& audioProcessor;
 
@@ -84,14 +100,22 @@ private:
 
     ShiftSlider offsetSlider, rightPanSlider, pitchDiffSlider, outGainSlider, haasCompAmtSlider;
     MirroredSlider leftPanSlider;
-    juce::ToggleButton centeredToggle {"equal delay"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, flipPanToggle {"flip pan"}, haasCompToggle {"haas comp"};
+    juce::ToggleButton centeredToggle {"equal delay"}, equalPitchToggle {"equal pitch shift"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, flipPanToggle {"flip pan"}, haasCompToggle {"haas comp"};
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attOffset, attLeftPan, attRightPan, attPitchDiff, attOutGain, attHaasAmt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attBypass, attLinkPan, attFlipPan, attHaasEn;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attEqualPitch, attBypass, attLinkPan, attFlipPan, attHaasEn;
 
     juce::Label offsetLabel, leftPanLabel, rightPanLabel, pitchDiffLabel, outGainLabel, haasCompAmtLabel;
     juce::Label offsetUnitLabel, leftPanUnitLabel, rightPanUnitLabel, pitchDiffUnitLabel, haasCompAmtUnitLabel, outGainUnitLabel;
     std::unique_ptr<TitleComponent> titleComponent;
+    std::unique_ptr<juce::Component> settingsOverlay;
+    juce::Label latencyLabel;
+    juce::Label versionLabel;
+    juce::ShapeButton settingsButton { "settings",
+                                       juce::Colours::white.withAlpha(0.4f),
+                                       juce::Colours::white.withAlpha(0.65f),
+                                       juce::Colours::white.withAlpha(0.85f) };
+    juce::String currentLanguage { "english" };
     
     // Dynamic readouts
     juce::Label leftReadout, rightReadout, haasReadout;
