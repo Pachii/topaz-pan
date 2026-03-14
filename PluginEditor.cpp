@@ -233,7 +233,7 @@ void VocalWidenerEditor::timerCallback()
     else if (earlierPath == 1.0f) precStr += "right";
     else                          precStr += "ambiguous";
     
-    precStr += juce::String::formatted("\nleft gain: %+.2f dB   |   right gain: %+.2f dB", oComp, dComp);
+    precStr += juce::String::formatted("\nleft gain: %.1f dB   |   right gain: %.1f dB", oComp, dComp);
     haasReadout.setText(precStr, juce::dontSendNotification);
 }
 
@@ -257,7 +257,7 @@ void VocalWidenerEditor::paint (juce::Graphics& g)
     
     g.setColour (juce::Colours::white.withAlpha(0.5f));
     g.setFont (juce::Font ("Helvetica Neue", 12.0f, juce::Font::plain));
-    g.drawText ("v1.0", getWidth() - 50, getHeight() - 30, 40, 20, juce::Justification::right, true);
+    g.drawText ("0.1 alpha", getWidth() - 90, getHeight() - 30, 80, 20, juce::Justification::right, true);
 }
 
 void VocalWidenerEditor::resized()
