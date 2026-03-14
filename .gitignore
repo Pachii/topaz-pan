@@ -1,0 +1,47 @@
+# CMake
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeSettings.json
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# JUCE Specific
+JuceLibraryCode/
+/JuceLibraryCode/
+*.jucer
+
+# Compiled Artifacts
+*.app
+*.vst3
+*.component
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.suo
+*.user
+*.orig
+.vs/
+*.sln
+*.vcxproj*
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+# Logs and Temps
+*.log
+/tmp/
