@@ -142,31 +142,31 @@ VocalWidenerEditor::VocalWidenerEditor (VocalWidenerProcessor& p)
     };
 
     setupSlider(offsetSlider, offsetLabel, "offset time", attOffset, "offsetTime");
-    offsetSlider.setTooltip("sets the delay between the left and right channels");
+    offsetLabel.setTooltip("sets the delay between the left and right channels");
     offsetSlider.textFromValueFunction = [](double value) { return formatOffsetMs(value); };
     offsetSlider.valueFromTextFunction = [](const juce::String& text) { return parseNumericValue(text); };
     setupUnitLabel(offsetUnitLabel, "ms");
 
     setupSlider(leftPanSlider, leftPanLabel, "left pan", attLeftPan, "leftPan");
-    leftPanSlider.setTooltip("pans the left channel in the stereo field");
+    leftPanLabel.setTooltip("pans the left channel in the stereo field");
 
     setupSlider(rightPanSlider, rightPanLabel, "right pan", attRightPan, "rightPan");
-    rightPanSlider.setTooltip("pans the right channel in the stereo field");
+    rightPanLabel.setTooltip("pans the right channel in the stereo field");
 
     setupSlider(pitchDiffSlider, pitchDiffLabel, "pitch difference", attPitchDiff, "pitchDiff");
-    pitchDiffSlider.setTooltip("adds subtle pitch separation between channels");
+    pitchDiffLabel.setTooltip("adds subtle pitch separation between channels");
     pitchDiffSlider.textFromValueFunction = [](double value) { return formatPitchCents(value); };
     pitchDiffSlider.valueFromTextFunction = [](const juce::String& text) { return parseNumericValue(text); };
     setupUnitLabel(pitchDiffUnitLabel, "c");
 
     setupSlider(haasCompAmtSlider, haasCompAmtLabel, "haas comp", attHaasAmt, "haasCompAmt");
-    haasCompAmtSlider.setTooltip("balances perceived loudness when channels are delayed");
+    haasCompAmtLabel.setTooltip("balances perceived loudness when channels are delayed");
     haasCompAmtSlider.textFromValueFunction = [](double value) { return formatHaasPercent(value); };
     haasCompAmtSlider.valueFromTextFunction = [](const juce::String& text) { return parseNumericValue(text); };
     setupUnitLabel(haasCompAmtUnitLabel, "%");
 
     setupSlider(outGainSlider, outGainLabel, "output gain", attOutGain, "outGain");
-    outGainSlider.setTooltip("controls the final output volume");
+    outGainLabel.setTooltip("controls the final output volume");
     outGainSlider.textFromValueFunction = [](double value) { return formatOutputDb(value); };
     outGainSlider.valueFromTextFunction = [](const juce::String& text) { return parseNumericValue(text); };
     setupUnitLabel(outGainUnitLabel, "dB");
@@ -233,7 +233,8 @@ void VocalWidenerEditor::timerCallback()
     else if (earlierPath == 1.0f) precStr += "right";
     else                          precStr += "ambiguous";
     
-    precStr += juce::String::formatted("\nleft gain: %.1f dB   |   right gain: %.1f dB", oComp, dComp);
+    auto formatCompDb = [](float v) { return juce::String(std::abs(v) < 0.05f ? 0.0f : v, 1); };
+    precStr += "\nleft gain: " + formatCompDb(oComp) + " dB   |   right gain: " + formatCompDb(dComp) + " dB";
     haasReadout.setText(precStr, juce::dontSendNotification);
 }
 
