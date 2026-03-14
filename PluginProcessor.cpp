@@ -211,11 +211,12 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   }
 
   // Calculate DSP state per path.
-  // In equal-delay mode we keep the same effective Haas difference while
-  // centering it around the source by adding half the offset to both paths
-  // and reporting that shared half-offset as host latency.
-  float delayTLeftMs = centered ? (offsetMs * 0.5f) : 0.0f;
-  float delayTRightMs = centered ? (offsetMs * 1.5f) : offsetMs;
+  // In equal-delay mode the host latency compensation does the centering for
+  // us. Reporting half the offset as plugin latency shifts the rest of the mix
+  // later by that amount, so the effective result becomes -offset/2 on the
+  // left and +offset/2 on the right without changing the internal L/R delta.
+  float delayTLeftMs = 0.0f;
+  float delayTRightMs = offsetMs;
 
   float leftReadoutMs = centered ? -(offsetMs * 0.5f) : 0.0f;
   float rightReadoutMs = centered ? (offsetMs * 0.5f) : offsetMs;
