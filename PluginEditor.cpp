@@ -9,6 +9,15 @@ constexpr int unitLabelWidth = 26;
 constexpr int titleAreaHeight = 54;
 constexpr float titleAreaHorizontalPadding = 4.0f;
 
+juce::Font makeHelveticaFont(float height,
+                             int styleFlags = juce::Font::plain) {
+  return juce::Font(juce::FontOptions("Helvetica Neue", height, styleFlags));
+}
+
+float measureTextWidth(const juce::Font &font, const juce::String &text) {
+  return juce::GlyphArrangement::getStringWidth(font, text);
+}
+
 double clampDisplayedZero(double value, double threshold) {
   return std::abs(value) < threshold ? 0.0 : value;
 }
@@ -64,8 +73,7 @@ public:
     g.reduceClipRegion(bounds.getSmallestIntegerContainer());
 
     const auto titleState = computeTitleState(bounds);
-    auto font = juce::Font("Helvetica Neue", 32.0f * titleState.scale,
-                           juce::Font::bold);
+    auto font = makeHelveticaFont(32.0f * titleState.scale, juce::Font::bold);
     const juce::String topazWord = titleState.allCaps ? "TOPAZ" : "topaz";
     const juce::String panWord = titleState.allCaps ? "PAN" : "pan";
 
@@ -142,8 +150,7 @@ private:
         mapLetterTracking(leftPanAmount.value, rightPanAmount.value, flipPan,
                           state.scale);
 
-    auto font = juce::Font("Helvetica Neue", 32.0f * state.scale,
-                           juce::Font::bold);
+    auto font = makeHelveticaFont(32.0f * state.scale, juce::Font::bold);
     const juce::String topazWord = state.allCaps ? "TOPAZ" : "topaz";
     const juce::String panWord = state.allCaps ? "PAN" : "pan";
     const float topazWidth =
@@ -198,7 +205,7 @@ private:
   float mapWordGap(const ParameterInfo &offset, juce::Font font, float areaWidth,
                    float topazWidth, float panWidth) const {
     const float spaceWidth =
-        juce::jmax(8.0f, font.getStringWidthFloat(" ") * 0.95f);
+        juce::jmax(8.0f, measureTextWidth(font, " ") * 0.95f);
     const float maxGap = juce::jmax(
         spaceWidth,
         (areaWidth - (2.0f * titleAreaHorizontalPadding) - topazWidth - panWidth) *
@@ -250,7 +257,7 @@ private:
 
     for (int i = 0; i < word.length(); ++i) {
       const juce::String glyph = juce::String::charToString(word[i]);
-      const float glyphWidth = font.getStringWidthFloat(glyph);
+      const float glyphWidth = measureTextWidth(font, glyph);
       lastGlyphWidth = glyphWidth;
 
       if (i < word.length() - 1)
@@ -293,7 +300,7 @@ private:
 
     for (int i = 0; i < word.length(); ++i) {
       const juce::String glyph = juce::String::charToString(word[i]);
-      const float glyphWidth = font.getStringWidthFloat(glyph);
+      const float glyphWidth = measureTextWidth(font, glyph);
       g.drawText(glyph,
                  juce::Rectangle<float>(cursorX, baselineY - font.getAscent(),
                                         glyphWidth + 4.0f, font.getHeight()),
@@ -313,7 +320,7 @@ CustomLookAndFeel::CustomLookAndFeel() {
 }
 
 juce::Font CustomLookAndFeel::getLabelFont(juce::Label &) {
-  return juce::Font(14.0f, juce::Font::plain);
+  return makeHelveticaFont(14.0f);
 }
 
 juce::Label *CustomLookAndFeel::createSliderTextBox(juce::Slider &slider) {
@@ -380,8 +387,10 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g,
 
   g.setColour(juce::Colours::white);
   g.setFont(14.0f);
-  g.drawText(button.getButtonText(), switchRect.getRight() + 8.0f, 0.0f,
-             bounds.getWidth() - switchW - 8.0f, bounds.getHeight(),
+  g.drawText(button.getButtonText(),
+             juce::Rectangle<float>(switchRect.getRight() + 8.0f, 0.0f,
+                                    bounds.getWidth() - switchW - 8.0f,
+                                    bounds.getHeight()),
              juce::Justification::centredLeft, true);
 }
 
@@ -643,7 +652,7 @@ void VocalWidenerEditor::paint(juce::Graphics &g) {
   }
 
   g.setColour(juce::Colours::white.withAlpha(0.5f));
-  g.setFont(juce::Font("Helvetica Neue", 12.0f, juce::Font::plain));
+  g.setFont(makeHelveticaFont(12.0f));
   g.drawText("0.1.0-alpha", getWidth() - 110, getHeight() - 30, 100, 20,
              juce::Justification::right, true);
 }
