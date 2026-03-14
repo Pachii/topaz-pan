@@ -122,7 +122,8 @@ namespace dsp_utils
 } // namespace dsp_utils
 
 class VocalWidenerProcessor : public juce::AudioProcessor,
-                              public juce::AudioProcessorValueTreeState::Listener
+                              public juce::AudioProcessorValueTreeState::Listener,
+                              private juce::AsyncUpdater
 {
 public:
     VocalWidenerProcessor();
@@ -182,11 +183,63 @@ public:
     bool isStereoLayout = false;
 
 private:
+    static constexpr float maxOffsetMs = 50.0f;
+    static constexpr float pitchWindowMs = 30.0f;
+    static constexpr float pitchLatencyMs = pitchWindowMs * 0.5f;
+    static constexpr float maxReportedLatencyMs = pitchLatencyMs + (maxOffsetMs * 0.5f);
+
+    class IntegerDelay
+    {
+    public:
+        void prepare(int maximumDelaySamples)
+        {
+            buffer.setSize(1, maximumDelaySamples + 1);
+            buffer.clear();
+            writePos = 0;
+            delaySamples = 0;
+        }
+
+        void setDelaySamples(int newDelaySamples)
+        {
+            jassert(buffer.getNumSamples() > 0);
+            delaySamples = juce::jlimit(0, buffer.getNumSamples() - 1, newDelaySamples);
+        }
+
+        float processSample(float in)
+        {
+            auto* writePtr = buffer.getWritePointer(0);
+            const int bufferSize = buffer.getNumSamples();
+
+            writePtr[writePos] = in;
+
+            int readPos = writePos - delaySamples;
+            if (readPos < 0)
+                readPos += bufferSize;
+
+            float out = writePtr[readPos];
+            writePos = (writePos + 1) % bufferSize;
+            return out;
+        }
+
+    private:
+        juce::AudioBuffer<float> buffer;
+        int writePos = 0;
+        int delaySamples = 0;
+    };
+
+    void handleAsyncUpdate() override;
+    int computeLatencySamples(float offsetMs, bool centered) const;
+    void queueLatencyUpdate(int latencySamples);
+
     float currentLeftCompDb = 0.0f;
     float currentRightCompDb = 0.0f;
+    double currentSampleRate = 44100.0;
+    std::atomic<int> pendingLatencySamples {0};
+    int activeLatencySamples = 0;
 
     dsp_utils::SmoothedDelay delayLeft, delayRight;
     dsp_utils::MicroPitchShifter pitchLeft, pitchRight;
+    IntegerDelay dryDelayLeft, dryDelayRight;
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalWidenerProcessor)
