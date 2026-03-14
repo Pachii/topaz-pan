@@ -1,0 +1,55 @@
+name: Build Plugin Formats
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows-vst3:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config Release --target AbstractWidener_VST3
+
+      - name: Upload Windows VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: topaz-pan-windows-vst3
+          path: build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3
+          if-no-files-found: error
+
+  build-macos-vst3:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build VST3 and AU
+        run: cmake --build build --config Release --target AbstractWidener_VST3 AbstractWidener_AU
+
+      - name: Upload macOS VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: topaz-pan-macos-vst3
+          path: build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3
+          if-no-files-found: error
+
+      - name: Upload macOS AU
+        uses: actions/upload-artifact@v4
+        with:
+          name: topaz-pan-macos-au
+          path: build/AbstractWidener_artefacts/Release/AU/topaz pan.component
+          if-no-files-found: error
