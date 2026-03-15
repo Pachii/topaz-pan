@@ -71,7 +71,7 @@ juce::String formatOutputDb(double value) {
 }
 
 float readoutFontHeightForLanguage(const juce::String &languageCode) {
-  return isJapaneseLanguageCode(languageCode) ? 14.0f : 13.2f;
+  return isJapaneseLanguageCode(languageCode) ? 12.8f : 12.2f;
 }
 
 double smoothStep(double t) {
@@ -100,11 +100,47 @@ juce::String normaliseVersionTag(juce::String version) {
   return normalised;
 }
 
+struct SemVer {
+  int major = 0, minor = 0, patch = 0;
+  bool valid = false;
+};
+
+SemVer parseSemVer(const juce::String &tag) {
+  // Strip leading 'v' and any pre-release suffix (e.g. "-alpha")
+  auto stripped = tag.trimCharactersAtStart("vV");
+  auto dashIndex = stripped.indexOfChar('-');
+  if (dashIndex >= 0)
+    stripped = stripped.substring(0, dashIndex);
+
+  auto parts = juce::StringArray::fromTokens(stripped, ".", "");
+  if (parts.size() < 2)
+    return {};
+
+  SemVer v;
+  v.major = parts[0].getIntValue();
+  v.minor = parts[1].getIntValue();
+  v.patch = parts.size() >= 3 ? parts[2].getIntValue() : 0;
+  v.valid = true;
+  return v;
+}
+
 bool isUpdateAvailable(const juce::String &currentVersion,
                        const juce::String &latestVersion) {
   const auto currentTag = normaliseVersionTag(currentVersion);
   const auto latestTag = normaliseVersionTag(latestVersion);
-  return latestTag.isNotEmpty() && latestTag != currentTag;
+
+  if (latestTag.isEmpty())
+    return false;
+
+  auto current = parseSemVer(currentTag);
+  auto latest = parseSemVer(latestTag);
+
+  if (!current.valid || !latest.valid)
+    return latestTag != currentTag;
+
+  if (latest.major != current.major) return latest.major > current.major;
+  if (latest.minor != current.minor) return latest.minor > current.minor;
+  return latest.patch > current.patch;
 }
 
 enum class UILanguage { english, japanese };
@@ -421,7 +457,7 @@ public:
     setInterceptsMouseClicks(true, true);
     setOpaque(true);
 
-	    addAndMakeVisible(titleGraphic);
+        addAndMakeVisible(titleGraphic);
 
     addAndMakeVisible(closeButton);
     closeButton.setButtonText("X");
@@ -429,9 +465,9 @@ public:
       if (onClose)
         onClose();
     };
-	    closeButton.getProperties().set("settingsClose", true);
-	    closeButton.setColour(juce::TextButton::buttonColourId,
-	                          juce::Colours::transparentBlack);
+        closeButton.getProperties().set("settingsClose", true);
+        closeButton.setColour(juce::TextButton::buttonColourId,
+                              juce::Colours::transparentBlack);
     closeButton.setColour(juce::TextButton::buttonOnColourId,
                           juce::Colours::transparentBlack);
     closeButton.setColour(juce::TextButton::textColourOffId,
@@ -453,30 +489,30 @@ public:
     languageButton.setColour(juce::TextButton::textColourOffId,
                              juce::Colours::white);
 
-	    addAndMakeVisible(checkForUpdatesButton);
-	    checkForUpdatesButton.onClick = [this] { beginUpdateCheck(); };
-	    checkForUpdatesButton.getProperties().set("settingsAction", true);
-	    checkForUpdatesButton.setColour(juce::TextButton::buttonColourId,
-	                                    juce::Colours::white.withAlpha(0.035f));
-	    checkForUpdatesButton.setColour(juce::TextButton::buttonOnColourId,
-	                                    juce::Colours::white.withAlpha(0.08f));
-	    checkForUpdatesButton.setColour(juce::TextButton::textColourOffId,
-	                                    juce::Colours::white);
+        addAndMakeVisible(checkForUpdatesButton);
+        checkForUpdatesButton.onClick = [this] { beginUpdateCheck(); };
+        checkForUpdatesButton.getProperties().set("settingsAction", true);
+        checkForUpdatesButton.setColour(juce::TextButton::buttonColourId,
+                                        juce::Colours::white.withAlpha(0.035f));
+        checkForUpdatesButton.setColour(juce::TextButton::buttonOnColourId,
+                                        juce::Colours::white.withAlpha(0.08f));
+        checkForUpdatesButton.setColour(juce::TextButton::textColourOffId,
+                                        juce::Colours::white);
 
-	    addAndMakeVisible(updateStatusLabel);
-	    updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
-	    updateStatusLabel.setColour(juce::Label::textColourId,
-	                                juce::Colours::white.withAlpha(0.62f));
+        addAndMakeVisible(updateStatusLabel);
+        updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
+        updateStatusLabel.setColour(juce::Label::textColourId,
+                                    juce::Colours::white.withAlpha(0.62f));
 
     addAndMakeVisible(disclaimerLabel);
-	    disclaimerLabel.setColour(juce::Label::textColourId,
-	                              juce::Colours::white.withAlpha(0.55f));
+        disclaimerLabel.setColour(juce::Label::textColourId,
+                                  juce::Colours::white.withAlpha(0.55f));
     disclaimerLabel.setJustificationType(juce::Justification::centredLeft);
     disclaimerLabel.setFont(makeHelveticaFont(11.0f));
 
     addAndMakeVisible(disclaimerDetailLabel);
-	    disclaimerDetailLabel.setColour(juce::Label::textColourId,
-	                                    juce::Colours::white.withAlpha(0.55f));
+        disclaimerDetailLabel.setColour(juce::Label::textColourId,
+                                        juce::Colours::white.withAlpha(0.55f));
     disclaimerDetailLabel.setJustificationType(juce::Justification::centredLeft);
     disclaimerDetailLabel.setFont(makeHelveticaFont(11.0f));
 
@@ -494,43 +530,43 @@ public:
   ~SettingsOverlay() override { setLookAndFeel(nullptr); }
 
   void paint(juce::Graphics &g) override {
-	    g.fillAll(juce::Colour::fromString("#FF7BBED4"));
+        g.fillAll(juce::Colour::fromString("#FF7BBED4"));
 
-	    g.setColour(juce::Colours::white.withAlpha(0.10f));
-	    const float footerRuleY = static_cast<float>(getHeight() - 146);
-	    g.drawLine(30.0f, footerRuleY, static_cast<float>(getWidth() - 30),
-	               footerRuleY, 1.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.10f));
+        const float footerRuleY = static_cast<float>(getHeight() - 146);
+        g.drawLine(30.0f, footerRuleY, static_cast<float>(getWidth() - 30),
+                   footerRuleY, 1.0f);
   }
 
   void resized() override {
-	    const int leftMargin = 30;
-	    const int labelW = 100;
-	    const int sliderW = 210;
-	    const int rowH = 34;
-	    const int rightEdge = getWidth() - 30;
+        const int leftMargin = 30;
+        const int labelW = 100;
+        const int sliderW = 210;
+        const int rowH = 34;
+        const int rightEdge = getWidth() - 30;
 
-	    titleGraphic.setBounds(leftMargin, 20, getWidth() - 60, titleAreaHeight);
+        titleGraphic.setBounds(leftMargin, 20, getWidth() - 60, titleAreaHeight);
     closeButton.setBounds(getWidth() - 58, 27, 32, 32);
 
-	    int yStart = 108;
-	    languageLabel.setBounds(leftMargin, yStart, labelW, rowH);
-	    languageButton.setBounds(leftMargin + labelW, yStart, sliderW + 52, rowH);
-	    yStart += rowH + 24;
+        int yStart = 108;
+        languageLabel.setBounds(leftMargin, yStart, labelW, rowH);
+        languageButton.setBounds(leftMargin + labelW, yStart, sliderW + 52, rowH);
+        yStart += rowH + 24;
 
-	    checkForUpdatesButton.setBounds(leftMargin + labelW, yStart, sliderW + 52,
-	                                    rowH);
-	    yStart += rowH + 16;
+        checkForUpdatesButton.setBounds(leftMargin + labelW, yStart, sliderW + 52,
+                                        rowH);
+        yStart += rowH + 16;
 
-	    updateStatusLabel.setBounds(leftMargin + labelW, yStart, sliderW + 52, 18);
+        updateStatusLabel.setBounds(leftMargin + labelW, yStart, sliderW + 52, 18);
 
-	    const int footerY = getHeight() - 118;
-	    disclaimerLabel.setBounds(leftMargin, footerY, rightEdge - leftMargin, 16);
-	    disclaimerDetailLabel.setBounds(leftMargin, footerY + 18, rightEdge - leftMargin, 16);
+        const int footerY = getHeight() - 118;
+        disclaimerLabel.setBounds(leftMargin, footerY, rightEdge - leftMargin, 16);
+        disclaimerDetailLabel.setBounds(leftMargin, footerY + 18, rightEdge - leftMargin, 16);
     releasesLinkButton.setBounds(leftMargin, footerY + 40, 140, 20);
   }
 
   void mouseUp(const juce::MouseEvent &event) override {
-	    if (!getPanelBounds().contains(event.getPosition())) {
+        if (!getPanelBounds().contains(event.getPosition())) {
       if (onClose)
         onClose();
     }
@@ -543,7 +579,7 @@ public:
 
 private:
   juce::Rectangle<int> getPanelBounds() const {
-	    return getLocalBounds();
+        return getLocalBounds();
   }
 
   void refreshUpdateStatusText() {
@@ -1265,7 +1301,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 
   setupSlider(offsetSlider, offsetLabel, "offset time", attOffset,
               "offsetTime");
-  offsetLabel.setTooltip("sets the delay between the left and right channels");
   offsetSlider.textFromValueFunction = [](double value) {
     return formatOffsetMs(value);
   };
@@ -1276,7 +1311,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 
   setupSlider(leftPanSlider, leftPanLabel, "left pan", attLeftPan, "leftPan");
   leftPanSlider.getProperties().set("mirrorFill", true);
-  leftPanLabel.setTooltip("sets how far left the left voice sits");
   leftPanSlider.textFromValueFunction = [](double value) {
     return formatPanAmount(value);
   };
@@ -1287,7 +1321,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 
   setupSlider(rightPanSlider, rightPanLabel, "right pan", attRightPan,
               "rightPan");
-  rightPanLabel.setTooltip("sets how far right the right voice sits");
   rightPanSlider.textFromValueFunction = [](double value) {
     return formatPanAmount(value);
   };
@@ -1298,7 +1331,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 
   setupSlider(pitchDiffSlider, pitchDiffLabel, "pitch shift", attPitchDiff,
               "pitchDiff");
-  pitchDiffLabel.setTooltip("adds subtle pitch separation between channels");
   pitchDiffSlider.textFromValueFunction = [](double value) {
     return formatPitchCents(value);
   };
@@ -1309,8 +1341,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 
   setupSlider(haasCompAmtSlider, haasCompAmtLabel, "haas comp", attHaasAmt,
               "haasCompAmt");
-  haasCompAmtLabel.setTooltip(
-      "balances perceived loudness when channels are delayed");
   haasCompAmtSlider.textFromValueFunction = [](double value) {
     return formatHaasPercent(value);
   };
@@ -1321,7 +1351,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 
   setupSlider(outGainSlider, outGainLabel, "output gain", attOutGain,
               "outGain");
-  outGainLabel.setTooltip("controls the final output volume");
   outGainSlider.textFromValueFunction = [](double value) {
     return formatOutputDb(value);
   };
@@ -1331,14 +1360,11 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   setupUnitLabel(outGainUnitLabel, "dB");
 
   addAndMakeVisible(centeredToggle);
-  centeredToggle.setTooltip("offsets delay equally across both channels");
   attCentered =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "centeredTiming", centeredToggle);
 
   addAndMakeVisible(equalPitchToggle);
-  equalPitchToggle.setTooltip(
-      "splits pitch shift evenly between negative left and positive right");
   attEqualPitch =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "equalPitchShift", equalPitchToggle);
@@ -1349,13 +1375,11 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
           audioProcessor.apvts, "bypass", bypassToggle);
 
   addAndMakeVisible(linkPanToggle);
-  linkPanToggle.setTooltip("locks both pan amounts together");
   attLinkPan =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "linkPan", linkPanToggle);
 
   addAndMakeVisible(flipPanToggle);
-  flipPanToggle.setTooltip("swaps the left and right pan destinations");
   attFlipPan =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "flipPan", flipPanToggle);
@@ -1670,11 +1694,11 @@ void VocalWidenerEditor::resized() {
   bypassToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
   yStart += colH + 20;
 
-  leftReadout.setBounds(leftMargin, yStart, 180, 50);
-  rightReadout.setBounds(leftMargin + 180, yStart, 180, 50);
-  yStart += 55;
+  leftReadout.setBounds(leftMargin, yStart, 180, 58);
+  rightReadout.setBounds(leftMargin + 180, yStart, 180, 58);
+  yStart += 62;
 
-  haasReadout.setBounds(leftMargin, yStart, 360, 40);
+  haasReadout.setBounds(leftMargin, yStart, 360, 48);
 
   const int footerY = getHeight() - 34;
   latencyLabel.setBounds(leftMargin, footerY - 1, 180, 20);
@@ -1682,8 +1706,8 @@ void VocalWidenerEditor::resized() {
   versionLabel.setBounds(getWidth() - 142, footerY - 1, 100, 20);
 
   if (isJapaneseLanguageCode(currentLanguageCode)) {
-    leftReadout.setBounds(leftMargin, yStart - 1, 180, 56);
-    rightReadout.setBounds(leftMargin + 180, yStart - 1, 180, 56);
-    haasReadout.setBounds(leftMargin, yStart + 54, 360, 48);
+    leftReadout.setBounds(leftMargin, yStart - 63, 180, 62);
+    rightReadout.setBounds(leftMargin + 180, yStart - 63, 180, 62);
+    haasReadout.setBounds(leftMargin, yStart, 360, 54);
   }
 }

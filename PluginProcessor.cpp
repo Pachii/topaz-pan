@@ -216,9 +216,6 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     dryDelayLeft.setDelaySamples(targetLatencySamples);
     dryDelayRight.setDelaySamples(targetLatencySamples);
     queueLatencyUpdate(targetLatencySamples);
-  } else {
-    dryDelayLeft.setDelaySamples(activeLatencySamples);
-    dryDelayRight.setDelaySamples(activeLatencySamples);
   }
 
   // Calculate DSP state per path.
@@ -306,6 +303,9 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   int numSamples = buffer.getNumSamples();
 
+  // Haas comp smoothing coefficient (~5ms time constant, sample-rate independent)
+  const float smoothCoeff = 1.0f - std::exp(-1.0f / (0.005f * static_cast<float>(currentSampleRate)));
+
   for (int i = 0; i < numSamples; ++i) {
     const float dryL = dryDelayLeft.processSample(channelL[i]);
     const float dryR = dryDelayRight.processSample(channelR[i]);
@@ -316,9 +316,8 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       continue;
     }
 
-    // Smooth Prec. Comp values
-    currentLeftCompDb += (targetLeftCompDb - currentLeftCompDb) * 0.005f;
-    currentRightCompDb += (targetRightCompDb - currentRightCompDb) * 0.005f;
+    currentLeftCompDb += (targetLeftCompDb - currentLeftCompDb) * smoothCoeff;
+    currentRightCompDb += (targetRightCompDb - currentRightCompDb) * smoothCoeff;
 
     float gPrecLeft = juce::Decibels::decibelsToGain(currentLeftCompDb);
     float gPrecRight = juce::Decibels::decibelsToGain(currentRightCompDb);
