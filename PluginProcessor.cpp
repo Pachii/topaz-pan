@@ -149,9 +149,12 @@ void VocalWidenerProcessor::prepareToPlay(double sampleRate,
 
   activeLatencySamples = computeLatencySamples(
       offsetTimeParam->load(std::memory_order_relaxed),
-      centeredTimingParam->load(std::memory_order_relaxed) > 0.5f);
+      centeredTimingParam->load(std::memory_order_relaxed) > 0.5f,
+      isPitchShiftActive(pitchDiffParam->load(std::memory_order_relaxed)));
   pendingLatencySamples.store(activeLatencySamples, std::memory_order_relaxed);
   setLatencySamples(activeLatencySamples);
+  wasPitchShiftActive =
+      isPitchShiftActive(pitchDiffParam->load(std::memory_order_relaxed));
 }
 
 void VocalWidenerProcessor::releaseResources() {}
@@ -172,6 +175,7 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       equalPitchShiftParam->load(std::memory_order_relaxed) > 0.5f;
   bool bypassed = bypassParam->load(std::memory_order_relaxed) > 0.5f;
   float pDiff = pitchDiffParam->load(std::memory_order_relaxed);
+  const bool pitchShiftActive = isPitchShiftActive(pDiff);
   float gainLinear = juce::Decibels::decibelsToGain(
       outputGainParam->load(std::memory_order_relaxed));
 
@@ -205,7 +209,8 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       juce::jlimit(0.0f, 1.0f, std::abs(rightBalance - leftBalance) * 0.5f);
   const bool hasMeaningfulPanSeparation = panSeparationWeight >= 0.03f;
 
-  const int targetLatencySamples = computeLatencySamples(offsetMs, centered);
+  const int targetLatencySamples =
+      computeLatencySamples(offsetMs, centered, pitchShiftActive);
   if (targetLatencySamples != activeLatencySamples) {
     activeLatencySamples = targetLatencySamples;
     dryDelayLeft.setDelaySamples(targetLatencySamples);
@@ -229,6 +234,12 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   float detuneLeftCents = equalPitchShift ? -(pDiff * 0.5f) : 0.0f;
   float detuneRightCents = equalPitchShift ? (pDiff * 0.5f) : pDiff;
+
+  if (pitchShiftActive != wasPitchShiftActive) {
+    pitchLeft.reset();
+    pitchRight.reset();
+    wasPitchShiftActive = pitchShiftActive;
+  }
 
   // Update readouts for UI
   leftDelayReadout.store(leftReadoutMs, std::memory_order_relaxed);
@@ -316,11 +327,13 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     float in = (channelL[i] + channelR[i]) * 0.5f;
 
     // Path A (Left)
-    float sA = pitchLeft.processSample(in);
+    float sA = pitchShiftActive ? pitchLeft.processSample(in)
+                                : pitchLeft.processBypassedSample(in);
     sA = delayLeft.processSample(sA) * gPrecLeft;
 
     // Path B (Right)
-    float sB = pitchRight.processSample(in);
+    float sB = pitchShiftActive ? pitchRight.processSample(in)
+                                : pitchRight.processBypassedSample(in);
     sB = delayRight.processSample(sB) * gPrecRight;
 
     // Pan and Mix
@@ -333,10 +346,15 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   }
 }
 
-int VocalWidenerProcessor::computeLatencySamples(float offsetMs,
-                                                 bool centered) const {
+bool VocalWidenerProcessor::isPitchShiftActive(float pitchDiffCents) const {
+  return std::abs(pitchDiffCents) >= 0.01f;
+}
+
+int VocalWidenerProcessor::computeLatencySamples(float offsetMs, bool centered,
+                                                 bool pitchShiftActive) const {
   const float totalLatencyMs =
-      pitchLatencyMs + (centered ? (offsetMs * 0.5f) : 0.0f);
+      (pitchShiftActive ? pitchLatencyMs : 0.0f) +
+      (centered ? (offsetMs * 0.5f) : 0.0f);
   return juce::roundToInt(
       (totalLatencyMs * static_cast<float>(currentSampleRate)) / 1000.0f);
 }
@@ -351,7 +369,11 @@ float VocalWidenerProcessor::getReportedLatencyMs() const {
   const bool centered =
       centeredTimingParam != nullptr &&
       centeredTimingParam->load(std::memory_order_relaxed) > 0.5f;
-  const int latencySamples = computeLatencySamples(offsetMs, centered);
+  const bool pitchShiftActive =
+      pitchDiffParam != nullptr &&
+      isPitchShiftActive(pitchDiffParam->load(std::memory_order_relaxed));
+  const int latencySamples =
+      computeLatencySamples(offsetMs, centered, pitchShiftActive);
 
   return (static_cast<float>(latencySamples) * 1000.0f) /
          static_cast<float>(currentSampleRate);

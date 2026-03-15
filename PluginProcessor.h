@@ -13,6 +13,10 @@ namespace dsp_utils
             fs = sampleRate;
             windowSamples = (windowMs * fs) / 1000.0;
             buffer.setSize(1, static_cast<int>(windowSamples * 2.0) + 100);
+            reset();
+        }
+
+        void reset() {
             buffer.clear();
             writePos = 0;
             phase = 0.0;
@@ -73,6 +77,16 @@ namespace dsp_utils
             else if (phase < 0.0) phase += 1.0;
 
             return out;
+        }
+
+        float processBypassedSample(float in) {
+            if (windowSamples <= 0.0) return in;
+
+            auto* writePtr = buffer.getWritePointer(0);
+            const int bufferSize = buffer.getNumSamples();
+            writePtr[writePos] = in;
+            writePos = (writePos + 1) % bufferSize;
+            return in;
         }
 
     private:
@@ -253,14 +267,17 @@ private:
     };
 
     void handleAsyncUpdate() override;
-    int computeLatencySamples(float offsetMs, bool centered) const;
+    int computeLatencySamples(float offsetMs, bool centered,
+                              bool pitchShiftActive) const;
     void queueLatencyUpdate(int latencySamples);
+    bool isPitchShiftActive(float pitchDiffCents) const;
 
     float currentLeftCompDb = 0.0f;
     float currentRightCompDb = 0.0f;
     double currentSampleRate = 44100.0;
     std::atomic<int> pendingLatencySamples {0};
     int activeLatencySamples = 0;
+    bool wasPitchShiftActive = false;
     juce::String languageCode {"en"};
 
     dsp_utils::SmoothedDelay delayLeft, delayRight;
