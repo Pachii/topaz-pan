@@ -7,13 +7,35 @@ namespace {
 constexpr int sliderTextBoxWidth = 52;
 constexpr int sliderTextBoxHeight = 20;
 constexpr int unitLabelGap = 6;
-constexpr int unitLabelWidth = 26;
+constexpr int unitLabelWidth = 34;
 constexpr int titleAreaHeight = 54;
 constexpr float titleAreaHorizontalPadding = 4.0f;
 
 juce::Font makeHelveticaFont(float height,
                              int styleFlags = juce::Font::plain) {
-  return juce::Font(juce::FontOptions("Helvetica Neue", height, styleFlags));
+  const bool bold = (styleFlags & juce::Font::bold) != 0;
+#if JUCE_MAC
+  return juce::Font(juce::FontOptions(bold ? "Hiragino Sans W7"
+                                           : "Hiragino Sans W5",
+                                      height, styleFlags));
+#elif JUCE_WINDOWS
+  return juce::Font(juce::FontOptions(bold ? "Yu Gothic UI Bold"
+                                           : "Yu Gothic UI Semibold",
+                                      height, styleFlags));
+#else
+  return juce::Font(juce::FontOptions(bold ? "Noto Sans CJK JP Bold"
+                                           : "Noto Sans CJK JP Medium",
+                                      height, styleFlags));
+#endif
+}
+
+juce::Font makeMultilingualSansFont(float height,
+                                    int styleFlags = juce::Font::plain) {
+  return makeHelveticaFont(height, styleFlags);
+}
+
+bool isJapaneseLanguageCode(const juce::String &languageCode) {
+  return VocalWidenerProcessor::normaliseLanguageCode(languageCode) == "ja";
 }
 
 float measureTextWidth(const juce::Font &font, const juce::String &text) {
@@ -48,6 +70,10 @@ juce::String formatOutputDb(double value) {
   return juce::String(clampDisplayedZero(value, 0.05), 1);
 }
 
+float readoutFontHeightForLanguage(const juce::String &languageCode) {
+  return isJapaneseLanguageCode(languageCode) ? 14.0f : 13.2f;
+}
+
 double smoothStep(double t) {
   t = juce::jlimit(0.0, 1.0, t);
   return t * t * (3.0 - 2.0 * t);
@@ -79,6 +105,202 @@ bool isUpdateAvailable(const juce::String &currentVersion,
   const auto currentTag = normaliseVersionTag(currentVersion);
   const auto latestTag = normaliseVersionTag(latestVersion);
   return latestTag.isNotEmpty() && latestTag != currentTag;
+}
+
+enum class UILanguage { english, japanese };
+
+struct LocalizedStrings {
+  juce::String titleLeadingWord;
+  juce::String titleTrailingWord;
+  juce::String titleBypassTrailingWord;
+  juce::String settingsTitle;
+  bool allowTitleAllCaps = true;
+
+  juce::String offsetTime;
+  juce::String leftPan;
+  juce::String rightPan;
+  juce::String pitchShift;
+  juce::String haasComp;
+  juce::String outputGain;
+  juce::String equalDelay;
+  juce::String equalPitchShift;
+  juce::String linkPan;
+  juce::String flipPan;
+  juce::String bypass;
+
+  juce::String tooltipOffset;
+  juce::String tooltipLeftPan;
+  juce::String tooltipRightPan;
+  juce::String tooltipPitchShift;
+  juce::String tooltipHaasAmount;
+  juce::String tooltipOutputGain;
+  juce::String tooltipEqualDelay;
+  juce::String tooltipEqualPitchShift;
+  juce::String tooltipLinkPan;
+  juce::String tooltipFlipPan;
+  juce::String tooltipSettings;
+  juce::String tooltipCloseSettings;
+
+  juce::String language;
+  juce::String checkForUpdates;
+  juce::String currentVersionPrefix;
+  juce::String checking;
+  juce::String updateAvailablePrefix;
+  juce::String upToDate;
+  juce::String updateCheckFailed;
+  juce::String disclaimerLine1;
+  juce::String disclaimerLine2;
+  juce::String releasesLink;
+
+  juce::String leftChannel;
+  juce::String rightChannel;
+  juce::String delay;
+  juce::String pitch;
+  juce::String reportedLatencyPrefix;
+  juce::String haasPrecedencePrefix;
+  juce::String statusOff;
+  juce::String statusNone;
+  juce::String statusLeft;
+  juce::String statusRight;
+  juce::String statusAmbiguous;
+  juce::String leftGain;
+  juce::String rightGain;
+  juce::String stereoWarning;
+};
+
+UILanguage languageFromCode(const juce::String &languageCode) {
+  return VocalWidenerProcessor::normaliseLanguageCode(languageCode) == "ja"
+             ? UILanguage::japanese
+             : UILanguage::english;
+}
+
+juce::String languageCodeFor(UILanguage language) {
+  return language == UILanguage::japanese ? "ja" : "en";
+}
+
+int comboIdForLanguage(UILanguage language) {
+  return language == UILanguage::japanese ? 2 : 1;
+}
+
+UILanguage languageForComboId(int comboId) {
+  return comboId == 2 ? UILanguage::japanese : UILanguage::english;
+}
+
+const LocalizedStrings &getStrings(UILanguage language) {
+  static const LocalizedStrings english {
+      "topaz",
+      "pan",
+      "unpan",
+      "settings",
+      true,
+      "offset time",
+      "left pan",
+      "right pan",
+      "pitch shift",
+      "haas comp",
+      "output gain",
+      "equal delay",
+      "equal pitch shift",
+      "link pan",
+      "flip pan",
+      "bypass",
+      "sets the delay between the left and right channels",
+      "sets how far left the left voice sits",
+      "sets how far right the right voice sits",
+      "adds subtle pitch separation between channels",
+      "balances perceived loudness when channels are delayed",
+      "controls the final output volume",
+      "offsets delay equally across both channels",
+      "splits pitch shift evenly between negative left and positive right",
+      "locks both pan amounts together",
+      "swaps the left and right pan destinations",
+      "settings",
+      "close settings",
+      "language",
+      "check for updates",
+      "current: ",
+      "checking...",
+      "update available: ",
+      "up to date",
+      "update check failed",
+      "update checks may be incomplete or inaccurate",
+      "verify the latest version on the link below:",
+      "github releases",
+      "left channel",
+      "right channel",
+      "delay",
+      "pitch",
+      "reported latency: ",
+      "haas precedence: ",
+      "off",
+      "none",
+      "left",
+      "right",
+      "ambiguous",
+      "left gain",
+      "right gain",
+      "Warning: Plugin requires a Stereo track layout to function properly."};
+
+  static const LocalizedStrings japanese {
+      juce::String::fromUTF8("とぱず"),
+      juce::String::fromUTF8("パン"),
+      juce::String::fromUTF8("パン"),
+      juce::String::fromUTF8("設定"),
+      false,
+      juce::String::fromUTF8("オフセット時間"),
+      juce::String::fromUTF8("左パン"),
+      juce::String::fromUTF8("右パン"),
+      juce::String::fromUTF8("ピッチシフト"),
+      juce::String::fromUTF8("ハース補正"),
+      juce::String::fromUTF8("出力ゲイン"),
+      juce::String::fromUTF8("均等ディレイ"),
+      juce::String::fromUTF8("均等ピッチ"),
+      juce::String::fromUTF8("パンリンク"),
+      juce::String::fromUTF8("パン反転"),
+      juce::String::fromUTF8("バイパス"),
+      juce::String::fromUTF8("左右チャンネルの時間差を設定します"),
+      juce::String::fromUTF8("左側の声をどこまで左に置くかを決めます"),
+      juce::String::fromUTF8("右側の声をどこまで右に置くかを決めます"),
+      juce::String::fromUTF8("左右チャンネルに微小なピッチ差を加えます"),
+      juce::String::fromUTF8("時間差で偏って聞こえる音量感を補正します"),
+      juce::String::fromUTF8("最終的な出力音量を調整します"),
+      juce::String::fromUTF8("左右の時間差を中央基準で扱います"),
+      juce::String::fromUTF8("左右に均等なピッチ差を付けます"),
+      juce::String::fromUTF8("左右のパン量を連動させます"),
+      juce::String::fromUTF8("左右のパン先を入れ替えます"),
+      juce::String::fromUTF8("設定"),
+      juce::String::fromUTF8("設定を閉じる"),
+      juce::String::fromUTF8("言語"),
+      juce::String::fromUTF8("アップデートを確認"),
+      juce::String::fromUTF8("現在のバージョン: "),
+      juce::String::fromUTF8("確認中..."),
+      juce::String::fromUTF8("更新があります: "),
+      juce::String::fromUTF8("最新版です"),
+      juce::String::fromUTF8("アップデートを確認できませんでした"),
+      juce::String::fromUTF8("更新確認の結果が不完全または不正確な場合があります"),
+      juce::String::fromUTF8("必ず下のリンクから最新版も確認してください"),
+      "GitHub Releases",
+      juce::String::fromUTF8("左チャンネル"),
+      juce::String::fromUTF8("右チャンネル"),
+      juce::String::fromUTF8("ディレイ"),
+      juce::String::fromUTF8("ピッチ"),
+      juce::String::fromUTF8("プラグインのレイテンシ: "),
+      juce::String::fromUTF8("ハース先行: "),
+      juce::String::fromUTF8("オフ"),
+      juce::String::fromUTF8("なし"),
+      juce::String::fromUTF8("左"),
+      juce::String::fromUTF8("右"),
+      juce::String::fromUTF8("不明"),
+      juce::String::fromUTF8("左ゲイン"),
+      juce::String::fromUTF8("右ゲイン"),
+      juce::String::fromUTF8(
+          "警告: このプラグインはステレオトラックでのみ正しく動作します。")};
+
+  return language == UILanguage::japanese ? japanese : english;
+}
+
+const LocalizedStrings &getStringsForCode(const juce::String &languageCode) {
+  return getStrings(languageFromCode(languageCode));
 }
 
 juce::Path createSettingsGearPath() {
@@ -153,10 +375,17 @@ UpdateCheckResult fetchLatestRelease() {
 
 class SettingsTitleComponent : public juce::Component {
 public:
+  void setText(const juce::String &newText) {
+    if (titleText == newText)
+      return;
+
+    titleText = newText;
+    repaint();
+  }
+
   void paint(juce::Graphics &g) override {
     const auto bounds = getLocalBounds().toFloat();
     auto font = makeHelveticaFont(32.0f, juce::Font::bold);
-    const juce::String word = "settings";
     const float baselineY =
         bounds.getCentreY() - (font.getHeight() * 0.5f) + font.getAscent();
 
@@ -164,8 +393,8 @@ public:
     g.setFont(font);
 
     float cursorX = bounds.getX() + titleAreaHorizontalPadding;
-    for (int i = 0; i < word.length(); ++i) {
-      const juce::String glyph = juce::String::charToString(word[i]);
+    for (int i = 0; i < titleText.length(); ++i) {
+      const juce::String glyph = juce::String::charToString(titleText[i]);
       const float glyphWidth = measureTextWidth(font, glyph);
       g.drawText(glyph,
                  juce::Rectangle<float>(cursorX, baselineY - font.getAscent(),
@@ -174,12 +403,15 @@ public:
       cursorX += glyphWidth;
     }
   }
+
+private:
+  juce::String titleText {"settings"};
 };
 
 class SettingsOverlay : public juce::Component {
 public:
   SettingsOverlay(CustomLookAndFeel &lookAndFeelRef,
-                  const juce::String &initialLanguage,
+                  const juce::String &initialLanguageCode,
                   std::function<void(const juce::String &)> onLanguageChangedIn,
                   std::function<void()> onCloseIn)
       : lookAndFeel(lookAndFeelRef),
@@ -204,33 +436,24 @@ public:
                           juce::Colours::transparentBlack);
     closeButton.setColour(juce::TextButton::textColourOffId,
                           juce::Colours::white);
-    closeButton.setTooltip("close settings");
+    closeButton.setTooltip(getStringsForCode(initialLanguageCode).tooltipCloseSettings);
 
-	    addAndMakeVisible(languageLabel);
-	    languageLabel.setText("language", juce::dontSendNotification);
-	    languageLabel.setColour(juce::Label::textColourId,
-	                            juce::Colours::white);
-	    languageLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(languageLabel);
+    languageLabel.setColour(juce::Label::textColourId,
+                            juce::Colours::white);
+    languageLabel.setJustificationType(juce::Justification::centredLeft);
 
-    addAndMakeVisible(languageBox);
-    languageBox.addItem("english", 1);
-    languageBox.setSelectedId(1, juce::dontSendNotification);
-    languageBox.setText(initialLanguage, juce::dontSendNotification);
-    languageBox.onChange = [this] {
-      if (onLanguageChanged)
-        onLanguageChanged(languageBox.getText());
-    };
-    languageBox.setColour(juce::ComboBox::backgroundColourId,
-                          juce::Colours::white.withAlpha(0.08f));
-    languageBox.setColour(juce::ComboBox::outlineColourId,
-                          juce::Colours::white.withAlpha(0.18f));
-    languageBox.setColour(juce::ComboBox::textColourId,
-                          juce::Colours::white);
-    languageBox.setColour(juce::ComboBox::arrowColourId,
-                          juce::Colours::white.withAlpha(0.85f));
+    addAndMakeVisible(languageButton);
+    languageButton.getProperties().set("settingsCombo", true);
+    languageButton.onClick = [this] { showLanguageMenu(); };
+    languageButton.setColour(juce::TextButton::buttonColourId,
+                             juce::Colours::transparentBlack);
+    languageButton.setColour(juce::TextButton::buttonOnColourId,
+                             juce::Colours::transparentBlack);
+    languageButton.setColour(juce::TextButton::textColourOffId,
+                             juce::Colours::white);
 
 	    addAndMakeVisible(checkForUpdatesButton);
-	    checkForUpdatesButton.setButtonText("check for updates");
 	    checkForUpdatesButton.onClick = [this] { beginUpdateCheck(); };
 	    checkForUpdatesButton.getProperties().set("settingsAction", true);
 	    checkForUpdatesButton.setColour(juce::TextButton::buttonColourId,
@@ -244,33 +467,28 @@ public:
 	    updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
 	    updateStatusLabel.setColour(juce::Label::textColourId,
 	                                juce::Colours::white.withAlpha(0.62f));
-	    updateStatusLabel.setText("current: " + VocalWidenerProcessor::getVersionTag(),
-	                              juce::dontSendNotification);
 
     addAndMakeVisible(disclaimerLabel);
-	    disclaimerLabel.setText("update checks may be incomplete or inaccurate",
-	                            juce::dontSendNotification);
 	    disclaimerLabel.setColour(juce::Label::textColourId,
 	                              juce::Colours::white.withAlpha(0.55f));
     disclaimerLabel.setJustificationType(juce::Justification::centredLeft);
     disclaimerLabel.setFont(makeHelveticaFont(11.0f));
 
     addAndMakeVisible(disclaimerDetailLabel);
-	    disclaimerDetailLabel.setText("verify the latest version on the link below:",
-	                                  juce::dontSendNotification);
 	    disclaimerDetailLabel.setColour(juce::Label::textColourId,
 	                                    juce::Colours::white.withAlpha(0.55f));
     disclaimerDetailLabel.setJustificationType(juce::Justification::centredLeft);
     disclaimerDetailLabel.setFont(makeHelveticaFont(11.0f));
 
     addAndMakeVisible(releasesLinkButton);
-    releasesLinkButton.setButtonText("github releases");
     releasesLinkButton.getProperties().set("settingsLink", true);
     releasesLinkButton.onClick = [] {
       VocalWidenerProcessor::getReleasesPageUrl().launchInDefaultBrowser();
     };
     releasesLinkButton.setColour(juce::TextButton::textColourOffId,
                                  juce::Colours::white.withAlpha(0.78f));
+
+    setLanguageCode(initialLanguageCode);
   }
 
   ~SettingsOverlay() override { setLookAndFeel(nullptr); }
@@ -296,7 +514,7 @@ public:
 
 	    int yStart = 108;
 	    languageLabel.setBounds(leftMargin, yStart, labelW, rowH);
-	    languageBox.setBounds(leftMargin + labelW, yStart, sliderW + 52, rowH);
+	    languageButton.setBounds(leftMargin + labelW, yStart, sliderW + 52, rowH);
 	    yStart += rowH + 24;
 
 	    checkForUpdatesButton.setBounds(leftMargin + labelW, yStart, sliderW + 52,
@@ -318,9 +536,93 @@ public:
     }
   }
 
+  void setLanguageCode(const juce::String &newLanguageCode) {
+    languageCode = VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
+    applyLocalisation();
+  }
+
 private:
   juce::Rectangle<int> getPanelBounds() const {
 	    return getLocalBounds();
+  }
+
+  void refreshUpdateStatusText() {
+    const auto &strings = getStringsForCode(languageCode);
+
+    switch (updateStatus) {
+    case UpdateStatus::currentVersion:
+      updateStatusLabel.setText(
+          strings.currentVersionPrefix + VocalWidenerProcessor::getVersionTag(),
+          juce::dontSendNotification);
+      break;
+    case UpdateStatus::checking:
+      updateStatusLabel.setText(strings.checking, juce::dontSendNotification);
+      break;
+    case UpdateStatus::updateAvailable:
+      updateStatusLabel.setText(strings.updateAvailablePrefix + latestTag,
+                                juce::dontSendNotification);
+      break;
+    case UpdateStatus::upToDate:
+      updateStatusLabel.setText(strings.upToDate, juce::dontSendNotification);
+      break;
+    case UpdateStatus::failed:
+      updateStatusLabel.setText(strings.updateCheckFailed,
+                                juce::dontSendNotification);
+      break;
+    }
+  }
+
+  void showLanguageMenu() {
+    juce::PopupMenu menu;
+    const auto currentLanguage = languageFromCode(languageCode);
+    menu.setLookAndFeel(&lookAndFeel);
+    menu.addItem(comboIdForLanguage(UILanguage::english), "English", true,
+                 currentLanguage == UILanguage::english);
+    menu.addItem(comboIdForLanguage(UILanguage::japanese),
+                 juce::String::fromUTF8("日本語"), true,
+                 currentLanguage == UILanguage::japanese);
+
+    auto options = juce::PopupMenu::Options()
+                       .withTargetComponent(languageButton)
+                       .withMinimumWidth(languageButton.getWidth())
+                       .withMaximumNumColumns(1)
+                       .withInitiallySelectedItem(
+                           comboIdForLanguage(currentLanguage))
+                       .withItemThatMustBeVisible(
+                           comboIdForLanguage(currentLanguage))
+                       .withStandardItemHeight(languageButton.getHeight());
+
+    juce::Component::SafePointer<SettingsOverlay> safeThis(this);
+    menu.showMenuAsync(options, [safeThis](int result) {
+      if (safeThis == nullptr || result == 0)
+        return;
+
+      const auto selectedLanguage = languageForComboId(result);
+      safeThis->languageCode = languageCodeFor(selectedLanguage);
+      safeThis->applyLocalisation();
+
+      if (safeThis->onLanguageChanged)
+        safeThis->onLanguageChanged(safeThis->languageCode);
+    });
+  }
+
+  void applyLocalisation() {
+    const auto &strings = getStringsForCode(languageCode);
+    titleGraphic.setText(strings.settingsTitle);
+    closeButton.setTooltip(strings.tooltipCloseSettings);
+    languageLabel.setText(strings.language, juce::dontSendNotification);
+    languageButton.setButtonText(
+        languageFromCode(languageCode) == UILanguage::japanese
+            ? juce::String::fromUTF8("日本語")
+            : "English");
+    checkForUpdatesButton.setButtonText(strings.checkForUpdates);
+    disclaimerLabel.setText(strings.disclaimerLine1, juce::dontSendNotification);
+    disclaimerDetailLabel.setText(strings.disclaimerLine2,
+                                  juce::dontSendNotification);
+    releasesLinkButton.setButtonText(strings.releasesLink);
+    refreshUpdateStatusText();
+    resized();
+    repaint();
   }
 
   void beginUpdateCheck() {
@@ -329,7 +631,8 @@ private:
 
     isCheckingForUpdates = true;
     checkForUpdatesButton.setEnabled(false);
-    updateStatusLabel.setText("checking...", juce::dontSendNotification);
+    updateStatus = UpdateStatus::checking;
+    refreshUpdateStatusText();
 
     juce::Component::SafePointer<SettingsOverlay> safeThis(this);
     std::thread([safeThis] {
@@ -344,25 +647,33 @@ private:
 
         switch (result.status) {
         case UpdateCheckResult::Status::updateAvailable:
-          safeThis->updateStatusLabel.setText(
-              "update available: " + result.latestTag,
-              juce::dontSendNotification);
+          safeThis->updateStatus = UpdateStatus::updateAvailable;
+          safeThis->latestTag = result.latestTag;
           break;
         case UpdateCheckResult::Status::upToDate:
-          safeThis->updateStatusLabel.setText("up to date",
-                                              juce::dontSendNotification);
+          safeThis->updateStatus = UpdateStatus::upToDate;
+          safeThis->latestTag.clear();
           break;
         case UpdateCheckResult::Status::failed:
-          safeThis->updateStatusLabel.setText("update check failed",
-                                              juce::dontSendNotification);
+          safeThis->updateStatus = UpdateStatus::failed;
+          safeThis->latestTag.clear();
           break;
         }
 
+        safeThis->refreshUpdateStatusText();
         safeThis->resized();
         safeThis->repaint();
       });
     }).detach();
   }
+
+  enum class UpdateStatus {
+    currentVersion,
+    checking,
+    updateAvailable,
+    upToDate,
+    failed
+  };
 
   CustomLookAndFeel &lookAndFeel;
   std::function<void(const juce::String &)> onLanguageChanged;
@@ -370,20 +681,25 @@ private:
   SettingsTitleComponent titleGraphic;
   juce::TextButton closeButton;
   juce::Label languageLabel;
-  juce::ComboBox languageBox;
+  juce::TextButton languageButton;
   juce::TextButton checkForUpdatesButton;
   juce::Label updateStatusLabel;
   juce::Label disclaimerLabel;
   juce::Label disclaimerDetailLabel;
   juce::TextButton releasesLinkButton;
   bool isCheckingForUpdates = false;
+  juce::String languageCode {"en"};
+  UpdateStatus updateStatus {UpdateStatus::currentVersion};
+  juce::String latestTag;
 };
 } // namespace
 
 class TitleComponent : public juce::Component {
 public:
-  explicit TitleComponent(VocalWidenerProcessor &processorRef)
-      : processor(processorRef) {
+  explicit TitleComponent(VocalWidenerProcessor &processorRef,
+                          std::function<juce::String()> getLanguageCodeIn)
+      : processor(processorRef),
+        getLanguageCode(std::move(getLanguageCodeIn)) {
     setInterceptsMouseClicks(false, false);
   }
 
@@ -392,8 +708,11 @@ public:
     g.reduceClipRegion(bounds.getSmallestIntegerContainer());
 
     const auto titleState = computeTitleState(bounds);
+    const auto &strings = getStringsForCode(getLanguageCode());
     auto font = makeHelveticaFont(32.0f * titleState.scale, juce::Font::bold);
-    const juce::String topazWord = titleState.allCaps ? "TOPAZ" : "topaz";
+    const juce::String topazWord =
+        titleState.allCaps ? strings.titleLeadingWord.toUpperCase()
+                           : strings.titleLeadingWord;
     const juce::String panWord =
         titleState.allCaps ? titleState.trailingWord.toUpperCase()
                            : titleState.trailingWord;
@@ -467,18 +786,25 @@ private:
         processor.flipPanParam->load(std::memory_order_relaxed) > 0.5f;
 
     state.scale = mapOutputScale(outputGain);
+    const auto &strings = getStringsForCode(getLanguageCode());
     state.allCaps =
-        outputGain.value >= (outputGain.max -
-                             juce::jmax(0.0001f, (outputGain.max - outputGain.min) * 0.001f));
-    state.trailingWord = bypassed ? "unpan" : "pan";
+        strings.allowTitleAllCaps &&
+        outputGain.value >=
+            (outputGain.max - juce::jmax(0.0001f,
+                                         (outputGain.max - outputGain.min) *
+                                             0.001f));
+    state.trailingWord = bypassed ? strings.titleBypassTrailingWord
+                                  : strings.titleTrailingWord;
     state.letterTracking =
         mapLetterTracking(leftPanAmount.value, rightPanAmount.value, flipPan,
                           state.scale);
 
-    auto font = makeHelveticaFont(32.0f * state.scale, juce::Font::bold);
-    const juce::String topazWord = state.allCaps ? "TOPAZ" : "topaz";
+    const juce::String topazWord =
+        state.allCaps ? strings.titleLeadingWord.toUpperCase()
+                      : strings.titleLeadingWord;
     const juce::String panWord =
         state.allCaps ? state.trailingWord.toUpperCase() : state.trailingWord;
+    auto font = makeHelveticaFont(32.0f * state.scale, juce::Font::bold);
     const float topazWidth =
         measureTrackedWord(topazWord, font, state.letterTracking);
     const float panWidth =
@@ -643,28 +969,49 @@ private:
   }
 
   VocalWidenerProcessor &processor;
+  std::function<juce::String()> getLanguageCode;
 };
 
 //==============================================================================
 CustomLookAndFeel::CustomLookAndFeel() {
   setDefaultSansSerifTypefaceName("Helvetica Neue");
+  setColour(juce::PopupMenu::backgroundColourId,
+            juce::Colour::fromString("#FF86C3D7"));
+  setColour(juce::PopupMenu::textColourId, juce::Colours::white);
+  setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+  setColour(juce::PopupMenu::highlightedBackgroundColourId,
+            juce::Colours::white.withAlpha(0.14f));
+}
+
+void CustomLookAndFeel::setLanguageCode(const juce::String &newLanguageCode) {
+  languageCode = VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
 }
 
 juce::Font CustomLookAndFeel::getLabelFont(juce::Label &) {
-  return makeHelveticaFont(14.0f);
+  return isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(13.0f)
+                                              : makeHelveticaFont(13.3f);
 }
 
 juce::Font CustomLookAndFeel::getTextButtonFont(juce::TextButton &button,
                                                 int buttonHeight) {
+  const bool japanese = isJapaneseLanguageCode(languageCode);
+
   if (button.getProperties().getWithDefault("settingsClose", false))
-    return makeHelveticaFont(static_cast<float>(buttonHeight) * 0.7f,
-                             juce::Font::bold);
+    return japanese ? makeMultilingualSansFont(static_cast<float>(buttonHeight) *
+                                                   0.64f,
+                                               juce::Font::bold)
+                    : makeHelveticaFont(static_cast<float>(buttonHeight) * 0.7f,
+                                        juce::Font::bold);
 
   if (button.getProperties().getWithDefault("settingsLink", false))
-    return makeHelveticaFont(11.5f);
+    return japanese ? makeMultilingualSansFont(10.8f)
+                    : makeHelveticaFont(11.5f);
 
-  return makeHelveticaFont(static_cast<float>(buttonHeight) * 0.5f,
-                           juce::Font::bold);
+  return japanese
+             ? makeMultilingualSansFont(static_cast<float>(buttonHeight) * 0.46f,
+                                        juce::Font::bold)
+             : makeHelveticaFont(static_cast<float>(buttonHeight) * 0.5f,
+                                 juce::Font::bold);
 }
 
 void CustomLookAndFeel::drawButtonBackground(
@@ -702,6 +1049,8 @@ void CustomLookAndFeel::drawButtonBackground(
   auto fill = backgroundColour;
   const bool isSettingsAction =
       button.getProperties().getWithDefault("settingsAction", false);
+  const bool isSettingsCombo =
+      button.getProperties().getWithDefault("settingsCombo", false);
 
   if (shouldDrawButtonAsDown)
     fill = fill.brighter(0.16f);
@@ -720,8 +1069,20 @@ void CustomLookAndFeel::drawButtonBackground(
   }
 
   g.setColour(juce::Colours::white.withAlpha(
-      isSettingsAction ? 0.22f : 0.18f));
+      (isSettingsAction || isSettingsCombo) ? 0.22f : 0.18f));
   g.drawRect(bounds, 1.0f);
+
+  if (isSettingsCombo) {
+    juce::Path arrow;
+    const float centreX = bounds.getRight() - 18.0f;
+    const float centreY = bounds.getCentreY();
+    arrow.startNewSubPath(centreX - 6.0f, centreY - 3.0f);
+    arrow.lineTo(centreX, centreY + 3.0f);
+    arrow.lineTo(centreX + 6.0f, centreY - 3.0f);
+
+    g.setColour(juce::Colours::white.withAlpha(0.85f));
+    g.strokePath(arrow, juce::PathStrokeType(2.2f));
+  }
 }
 
 void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
@@ -739,6 +1100,8 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
       button.getProperties().getWithDefault("settingsAction", false);
   const bool isSettingsLink =
       button.getProperties().getWithDefault("settingsLink", false);
+  const bool isSettingsCombo =
+      button.getProperties().getWithDefault("settingsCombo", false);
 
   if (isClose)
     return;
@@ -748,49 +1111,17 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
                        : juce::Justification::centredLeft;
   g.drawText(button.getButtonText(),
              button.getLocalBounds().toFloat().reduced(
-                 (isSettingsAction || isSettingsLink) ? 0.0f : 12.0f, 0.0f),
+                 (isSettingsAction || isSettingsLink) ? 0.0f
+                                                      : (isSettingsCombo ? 12.0f
+                                                                         : 12.0f),
+                 0.0f),
              justification,
              false);
 }
 
-void CustomLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
-                                     bool isButtonDown, int buttonX, int buttonY,
-                                     int buttonW, int buttonH,
-                                     juce::ComboBox &box) {
-  juce::ignoreUnused(buttonX, buttonY, buttonW, buttonH);
-  auto bounds = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width),
-                                       static_cast<float>(height));
-
-  auto fill = box.findColour(juce::ComboBox::backgroundColourId);
-  if (isButtonDown)
-    fill = fill.brighter(0.08f);
-
-  g.setColour(fill);
-  g.fillRect(bounds);
-
-  g.setColour(box.findColour(juce::ComboBox::outlineColourId));
-  g.drawRect(bounds, 1.0f);
-
-  juce::Path arrow;
-  const float centreX = static_cast<float>(width) - 18.0f;
-  const float centreY = static_cast<float>(height) * 0.5f;
-  arrow.startNewSubPath(centreX - 6.0f, centreY - 3.0f);
-  arrow.lineTo(centreX, centreY + 3.0f);
-  arrow.lineTo(centreX + 6.0f, centreY - 3.0f);
-
-  g.setColour(box.findColour(juce::ComboBox::arrowColourId));
-  g.strokePath(arrow, juce::PathStrokeType(2.2f));
-}
-
-juce::Font CustomLookAndFeel::getComboBoxFont(juce::ComboBox &) {
-  return makeHelveticaFont(15.0f);
-}
-
-void CustomLookAndFeel::positionComboBoxText(juce::ComboBox &box,
-                                             juce::Label &label) {
-  label.setBounds(12, 1, box.getWidth() - 34, box.getHeight() - 2);
-  label.setFont(getComboBoxFont(box));
-  label.setJustificationType(juce::Justification::centredLeft);
+juce::Font CustomLookAndFeel::getPopupMenuFont() {
+  return makeMultilingualSansFont(isJapaneseLanguageCode(languageCode) ? 14.0f
+                                                                       : 15.0f);
 }
 
 juce::Label *CustomLookAndFeel::createSliderTextBox(juce::Slider &slider) {
@@ -803,7 +1134,8 @@ void CustomLookAndFeel::drawTooltip(juce::Graphics &g, const juce::String &text,
                                     int width, int height) {
   g.fillAll(juce::Colour::fromString("#E0222222")); // Dark subtle backdrop
   g.setColour(juce::Colours::white);
-  g.setFont(14.0f);
+  g.setFont(isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(13.0f)
+                                                 : makeHelveticaFont(14.0f));
   g.drawText(text, 0, 0, width, height, juce::Justification::centred, true);
 }
 
@@ -875,7 +1207,8 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g,
   g.fillEllipse(thumbX, thumbY, thumbSize, thumbSize);
 
   g.setColour(juce::Colours::white);
-  g.setFont(14.0f);
+  g.setFont(isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(13.0f)
+                                                 : makeHelveticaFont(13.2f));
   g.drawText(button.getButtonText(),
              juce::Rectangle<float>(switchRect.getRight() + 8.0f, 0.0f,
                                     bounds.getWidth() - switchW - 8.0f,
@@ -887,11 +1220,14 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g,
 VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
     : AudioProcessorEditor(&p), audioProcessor(p) {
   setLookAndFeel(&customLookAndFeel);
-  titleComponent = std::make_unique<TitleComponent>(audioProcessor);
+  currentLanguageCode = audioProcessor.getLanguageCode();
+  customLookAndFeel.setLanguageCode(currentLanguageCode);
+  titleComponent = std::make_unique<TitleComponent>(
+      audioProcessor, [this] { return currentLanguageCode; });
   settingsOverlay = std::make_unique<SettingsOverlay>(
-      customLookAndFeel, currentLanguage,
-      [this](const juce::String &selectedLanguage) {
-        currentLanguage = selectedLanguage;
+      customLookAndFeel, currentLanguageCode,
+      [this](const juce::String &selectedLanguageCode) {
+        setCurrentLanguageCode(selectedLanguageCode);
       },
       [this] { setSettingsVisible(false); });
   addAndMakeVisible(*titleComponent);
@@ -1043,6 +1379,9 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   leftReadout.setColour(juce::Label::textColourId, juce::Colours::white);
   rightReadout.setColour(juce::Label::textColourId, juce::Colours::white);
   haasReadout.setColour(juce::Label::textColourId, juce::Colours::white);
+  leftReadout.setMinimumHorizontalScale(1.0f);
+  rightReadout.setMinimumHorizontalScale(1.0f);
+  haasReadout.setMinimumHorizontalScale(1.0f);
   latencyLabel.setColour(juce::Label::textColourId,
                          juce::Colours::white.withAlpha(0.55f));
   latencyLabel.setJustificationType(juce::Justification::centredLeft);
@@ -1053,13 +1392,12 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   versionLabel.setText(VocalWidenerProcessor::getVersionTag(),
                        juce::dontSendNotification);
   versionLabel.setInterceptsMouseClicks(false, false);
-  latencyLabel.setText("reported latency: 0.00 ms", juce::dontSendNotification);
 
   settingsButton.setShape(createSettingsGearPath(), false, true, false);
   settingsButton.setBorderSize(juce::BorderSize<int>(2));
-  settingsButton.setTooltip("settings");
   settingsButton.onClick = [this] { showSettingsPopup(); };
 
+  applyLocalisation();
   updateHaasCompVisualState(
       audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
       audioProcessor.linkPanParam->load(std::memory_order_relaxed) > 0.5f);
@@ -1070,6 +1408,66 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 }
 
 VocalWidenerEditor::~VocalWidenerEditor() { setLookAndFeel(nullptr); }
+
+void VocalWidenerEditor::setCurrentLanguageCode(
+    const juce::String &newLanguageCode) {
+  const auto normalised =
+      VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
+
+  if (currentLanguageCode == normalised)
+    return;
+
+  currentLanguageCode = normalised;
+  audioProcessor.setLanguageCode(currentLanguageCode);
+  applyLocalisation();
+}
+
+void VocalWidenerEditor::applyLocalisation() {
+  const auto &strings = getStringsForCode(currentLanguageCode);
+  customLookAndFeel.setLanguageCode(currentLanguageCode);
+  const auto readoutFont = makeHelveticaFont(
+      readoutFontHeightForLanguage(currentLanguageCode));
+
+  offsetLabel.setText(strings.offsetTime, juce::dontSendNotification);
+  leftPanLabel.setText(strings.leftPan, juce::dontSendNotification);
+  rightPanLabel.setText(strings.rightPan, juce::dontSendNotification);
+  pitchDiffLabel.setText(strings.pitchShift, juce::dontSendNotification);
+  haasCompAmtLabel.setText(strings.haasComp, juce::dontSendNotification);
+  outGainLabel.setText(strings.outputGain, juce::dontSendNotification);
+
+  centeredToggle.setButtonText(strings.equalDelay);
+  equalPitchToggle.setButtonText(strings.equalPitchShift);
+  linkPanToggle.setButtonText(strings.linkPan);
+  flipPanToggle.setButtonText(strings.flipPan);
+  haasCompToggle.setButtonText(strings.haasComp);
+  bypassToggle.setButtonText(strings.bypass);
+
+  offsetLabel.setTooltip(strings.tooltipOffset);
+  leftPanLabel.setTooltip(strings.tooltipLeftPan);
+  rightPanLabel.setTooltip(strings.tooltipRightPan);
+  pitchDiffLabel.setTooltip(strings.tooltipPitchShift);
+  haasCompAmtLabel.setTooltip(strings.tooltipHaasAmount);
+  outGainLabel.setTooltip(strings.tooltipOutputGain);
+  centeredToggle.setTooltip(strings.tooltipEqualDelay);
+  equalPitchToggle.setTooltip(strings.tooltipEqualPitchShift);
+  linkPanToggle.setTooltip(strings.tooltipLinkPan);
+  flipPanToggle.setTooltip(strings.tooltipFlipPan);
+  settingsButton.setTooltip(strings.tooltipSettings);
+
+  latencyLabel.setText(strings.reportedLatencyPrefix + "0.00 ms",
+                       juce::dontSendNotification);
+
+  if (settingsOverlay != nullptr)
+    if (auto *overlay = dynamic_cast<SettingsOverlay *>(settingsOverlay.get()))
+      overlay->setLanguageCode(currentLanguageCode);
+
+  if (titleComponent != nullptr)
+    titleComponent->repaint();
+
+  leftReadout.setFont(readoutFont);
+  rightReadout.setFont(readoutFont);
+  haasReadout.setFont(readoutFont);
+}
 
 void VocalWidenerEditor::updateHaasCompVisualState(bool enabled) {
   const float activeAlpha = 1.0f;
@@ -1105,6 +1503,8 @@ void VocalWidenerEditor::timerCallback() {
   if (!audioProcessor.isStereoLayout)
     return; // Banner will cover UI
 
+  const auto &strings = getStringsForCode(currentLanguageCode);
+
   const bool haasEnabled =
       audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f;
   const bool linkPanEnabled =
@@ -1133,12 +1533,14 @@ void VocalWidenerEditor::timerCallback() {
     dPit = 0.0f;
 
   leftReadout.setText(
-      juce::String::formatted("left channel:\ndelay: %+.2f ms\npitch: %+.2f c",
-                              oDel, oPit),
+      strings.leftChannel + ":\n" + strings.delay + ": " +
+          juce::String::formatted("%+.2f", oDel) + " ms\n" + strings.pitch +
+          ": " + juce::String::formatted("%+.2f", oPit) + " c",
       juce::dontSendNotification);
   rightReadout.setText(
-      juce::String::formatted("right channel:\ndelay: %+.2f ms\npitch: %+.2f c",
-                              dDel, dPit),
+      strings.rightChannel + ":\n" + strings.delay + ": " +
+          juce::String::formatted("%+.2f", dDel) + " ms\n" + strings.pitch +
+          ": " + juce::String::formatted("%+.2f", dPit) + " c",
       juce::dontSendNotification);
 
   float earlierPath =
@@ -1155,27 +1557,28 @@ void VocalWidenerEditor::timerCallback() {
       earlierPath == 0.0f || earlierPath == 1.0f;
   const bool hasAudibleHaasGain = oComp != 0.0f || dComp != 0.0f;
 
-  juce::String precStr = "haas precedence: ";
+  juce::String precStr = strings.haasPrecedencePrefix;
   if (!effectiveHaasEnabled)
-    precStr += "off";
+    precStr += strings.statusOff;
   else if (!hasDirectionalPrecedence && !hasAudibleHaasGain)
-    precStr += "none";
+    precStr += strings.statusNone;
   else if (earlierPath == 0.0f)
-    precStr += "left";
+    precStr += strings.statusLeft;
   else if (earlierPath == 1.0f)
-    precStr += "right";
+    precStr += strings.statusRight;
   else
-    precStr += "ambiguous";
+    precStr += strings.statusAmbiguous;
 
   auto formatCompDb = [](float v) {
     return juce::String(std::abs(v) < 0.005f ? 0.0f : v, 2);
   };
-  precStr += "\nleft gain: " + formatCompDb(oComp) +
-             " dB   |   right gain: " + formatCompDb(dComp) + " dB";
+  precStr += "\n" + strings.leftGain + ": " + formatCompDb(oComp) +
+             " dB   |   " + strings.rightGain + ": " + formatCompDb(dComp) +
+             " dB";
   haasReadout.setText(precStr, juce::dontSendNotification);
 
   latencyLabel.setText(
-      "reported latency: " +
+      strings.reportedLatencyPrefix +
           juce::String(audioProcessor.getReportedLatencyMs(), 2) + " ms",
       juce::dontSendNotification);
 }
@@ -1187,13 +1590,13 @@ void VocalWidenerEditor::paint(juce::Graphics &g) {
                      : juce::Colour::fromString("#FF7BBED4"));
 
   if (!audioProcessor.isBusesLayoutSupported(audioProcessor.getBusesLayout())) {
+    const auto &strings = getStringsForCode(currentLanguageCode);
     g.setColour(juce::Colours::red.withAlpha(0.8f));
     g.fillRect(0, 0, getWidth(), 30);
     g.setColour(juce::Colours::white);
     g.setFont(14.0f);
-    g.drawText(
-        "Warning: Plugin requires a Stereo track layout to function properly.",
-        0, 0, getWidth(), 30, juce::Justification::centred, true);
+    g.drawText(strings.stereoWarning, 0, 0, getWidth(), 30,
+               juce::Justification::centred, true);
   }
 
 }
@@ -1277,4 +1680,10 @@ void VocalWidenerEditor::resized() {
   latencyLabel.setBounds(leftMargin, footerY - 1, 180, 20);
   settingsButton.setBounds(getWidth() - 34, footerY, 18, 18);
   versionLabel.setBounds(getWidth() - 142, footerY - 1, 100, 20);
+
+  if (isJapaneseLanguageCode(currentLanguageCode)) {
+    leftReadout.setBounds(leftMargin, yStart - 1, 180, 56);
+    rightReadout.setBounds(leftMargin + 180, yStart - 1, 180, 56);
+    haasReadout.setBounds(leftMargin, yStart + 54, 360, 48);
+  }
 }

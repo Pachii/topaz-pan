@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(topaz_pan VERSION 0.1.0)
+project(topaz_pan VERSION 0.2.0)
 
 # ==============================================================================
 # Fetch JUCE automatically to make the project self-contained

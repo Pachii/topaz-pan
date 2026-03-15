@@ -1,6 +1,10 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+namespace {
+constexpr auto uiLanguageStateKey = "uiLanguage";
+}
+
 VocalWidenerProcessor::VocalWidenerProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
     : AudioProcessor(
@@ -27,6 +31,8 @@ VocalWidenerProcessor::VocalWidenerProcessor()
   apvts.addParameterListener("leftPan", this);
   apvts.addParameterListener("rightPan", this);
   apvts.addParameterListener("linkPan", this);
+
+  setLanguageCode(apvts.state.getProperty(uiLanguageStateKey, "en").toString());
 }
 
 VocalWidenerProcessor::~VocalWidenerProcessor() {
@@ -356,12 +362,34 @@ void VocalWidenerProcessor::queueLatencyUpdate(int latencySamples) {
   triggerAsyncUpdate();
 }
 
+juce::String VocalWidenerProcessor::normaliseLanguageCode(
+    juce::String languageCodeToNormalise) {
+  auto code = languageCodeToNormalise.trim().toLowerCase();
+
+  if (code == "ja" || code == "jp" || code == "japanese" ||
+      code == juce::String::fromUTF8("日本語"))
+    return "ja";
+
+  return "en";
+}
+
+juce::String VocalWidenerProcessor::getLanguageCode() const {
+  return normaliseLanguageCode(languageCode);
+}
+
+void VocalWidenerProcessor::setLanguageCode(
+    const juce::String &newLanguageCode) {
+  languageCode = normaliseLanguageCode(newLanguageCode);
+  apvts.state.setProperty(uiLanguageStateKey, languageCode, nullptr);
+}
+
 void VocalWidenerProcessor::handleAsyncUpdate() {
   setLatencySamples(pendingLatencySamples.load(std::memory_order_relaxed));
 }
 
 void VocalWidenerProcessor::getStateInformation(juce::MemoryBlock &destData) {
   auto state = apvts.copyState();
+  state.setProperty(uiLanguageStateKey, getLanguageCode(), nullptr);
   std::unique_ptr<juce::XmlElement> xml(state.createXml());
   copyXmlToBinary(*xml, destData);
 }
@@ -371,8 +399,11 @@ void VocalWidenerProcessor::setStateInformation(const void *data,
   std::unique_ptr<juce::XmlElement> xmlState(
       getXmlFromBinary(data, sizeInBytes));
   if (xmlState.get() != nullptr)
-    if (xmlState->hasTagName(apvts.state.getType()))
+    if (xmlState->hasTagName(apvts.state.getType())) {
       apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+      setLanguageCode(apvts.state.getProperty(uiLanguageStateKey, "en")
+                          .toString());
+    }
 }
 
 juce::AudioProcessorEditor *VocalWidenerProcessor::createEditor() {

@@ -152,10 +152,13 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
     const juce::String getName() const override { return "Vocal Widener"; }
-    static juce::String getVersionTag() { return "v0.1.0-alpha"; }
+    static juce::String getVersionTag() { return "v0.2.0-alpha"; }
     static juce::URL getReleasesPageUrl() { return juce::URL("https://github.com/Pachii/topaz-pan/releases"); }
     static juce::URL getLatestReleaseApiUrl() { return juce::URL("https://api.github.com/repos/Pachii/topaz-pan/releases/latest"); }
+    static juce::String normaliseLanguageCode(juce::String languageCode);
     float getReportedLatencyMs() const;
+    juce::String getLanguageCode() const;
+    void setLanguageCode(const juce::String& languageCode);
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -258,6 +261,7 @@ private:
     double currentSampleRate = 44100.0;
     std::atomic<int> pendingLatencySamples {0};
     int activeLatencySamples = 0;
+    juce::String languageCode {"en"};
 
     dsp_utils::SmoothedDelay delayLeft, delayRight;
     dsp_utils::MicroPitchShifter pitchLeft, pitchRight;
