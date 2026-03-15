@@ -176,6 +176,8 @@ struct LocalizedStrings {
   juce::String tooltipFlipPan;
   juce::String tooltipSettings;
   juce::String tooltipCloseSettings;
+  juce::String resetDefaults;
+  juce::String tooltipResetDefaults;
 
   juce::String language;
   juce::String checkForUpdates;
@@ -252,6 +254,8 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "swaps the left and right pan destinations",
       "settings",
       "close settings",
+      "reset defaults",
+      "resets all parameters to their original values",
       "language",
       "check for updates",
       "current: ",
@@ -266,7 +270,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "right channel",
       "delay",
       "pitch",
-      "reported latency: ",
+      "latency: ",
       "haas precedence: ",
       "off",
       "none",
@@ -306,6 +310,8 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("左右のパン先を入れ替えます"),
       juce::String::fromUTF8("設定"),
       juce::String::fromUTF8("設定を閉じる"),
+      juce::String::fromUTF8("デフォルトに戻す"),
+      juce::String::fromUTF8("すべてのパラメータを初期値に戻します"),
       juce::String::fromUTF8("言語"),
       juce::String::fromUTF8("アップデートを確認"),
       juce::String::fromUTF8("現在のバージョン: "),
@@ -320,7 +326,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("右チャンネル"),
       juce::String::fromUTF8("ディレイ"),
       juce::String::fromUTF8("ピッチ"),
-      juce::String::fromUTF8("プラグインのレイテンシ: "),
+      juce::String::fromUTF8("レイテンシ: "),
       juce::String::fromUTF8("ハース先行: "),
       juce::String::fromUTF8("オフ"),
       juce::String::fromUTF8("なし"),
@@ -359,6 +365,8 @@ juce::Path createSettingsGearPath() {
   path.addEllipse(37.0f, 37.0f, 26.0f, 26.0f);
   return path;
 }
+
+
 
 struct UpdateCheckResult {
   enum class Status { upToDate, updateAvailable, failed };
@@ -523,6 +531,34 @@ public:
     };
     releasesLinkButton.setColour(juce::TextButton::textColourOffId,
                                  juce::Colours::white.withAlpha(0.78f));
+    releasesLinkButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+
+    // Social footer text links
+    auto setupSocialLink = [this](juce::TextButton &btn, const juce::String &url) {
+      btn.getProperties().set("settingsLink", true);
+      btn.onClick = [url] { juce::URL(url).launchInDefaultBrowser(); };
+      btn.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+      btn.setColour(juce::TextButton::textColourOffId,
+                    juce::Colours::white.withAlpha(0.55f));
+      btn.setColour(juce::TextButton::buttonColourId,
+                    juce::Colours::transparentBlack);
+      btn.setColour(juce::TextButton::buttonOnColourId,
+                    juce::Colours::transparentBlack);
+      addAndMakeVisible(btn);
+    };
+
+    setupSocialLink(homepageLinkButton, "https://toopazu.net");
+    setupSocialLink(xLinkButton, "https://x.com/toopazu");
+    setupSocialLink(youtubeLinkButton, "https://www.youtube.com/@10pazu");
+
+    for (auto *dot : { &socialDot1, &socialDot2 }) {
+      dot->setText(juce::CharPointer_UTF8("\xc2\xb7"), juce::dontSendNotification);
+      dot->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.35f));
+      dot->setJustificationType(juce::Justification::centred);
+      dot->setInterceptsMouseClicks(false, false);
+      dot->setFont(makeHelveticaFont(12.0f));
+      addAndMakeVisible(*dot);
+    }
 
     setLanguageCode(initialLanguageCode);
   }
@@ -562,7 +598,41 @@ public:
         const int footerY = getHeight() - 118;
         disclaimerLabel.setBounds(leftMargin, footerY, rightEdge - leftMargin, 16);
         disclaimerDetailLabel.setBounds(leftMargin, footerY + 18, rightEdge - leftMargin, 16);
-    releasesLinkButton.setBounds(leftMargin, footerY + 40, 140, 20);
+    releasesLinkButton.setBounds(leftMargin, footerY + 38, 140, 20);
+
+    // Social links row at bottom — center aligned
+    const int linksY = getHeight() - 38;
+    const int linkH = 18;
+    const int dotW = 10;
+    auto linkFont = isJapaneseLanguageCode(languageCode)
+                        ? makeMultilingualSansFont(10.8f)
+                        : makeHelveticaFont(11.5f);
+
+    // First pass: measure total width
+    auto measureLink = [&](juce::TextButton &btn) -> int {
+      return static_cast<int>(std::ceil(measureTextWidth(linkFont, btn.getButtonText()))) + 4;
+    };
+    int totalW = measureLink(homepageLinkButton) + dotW
+               + measureLink(xLinkButton) + dotW
+               + measureLink(youtubeLinkButton);
+    int linkX = (getWidth() - totalW) / 2;
+
+    // Second pass: place
+    auto layoutLink = [&](juce::TextButton &btn) {
+      int w = measureLink(btn);
+      btn.setBounds(linkX, linksY, w, linkH);
+      linkX += w;
+    };
+    auto layoutDot = [&](juce::Label &dot) {
+      dot.setBounds(linkX, linksY, dotW, linkH);
+      linkX += dotW;
+    };
+
+    layoutLink(homepageLinkButton);
+    layoutDot(socialDot1);
+    layoutLink(xLinkButton);
+    layoutDot(socialDot2);
+    layoutLink(youtubeLinkButton);
   }
 
   void mouseUp(const juce::MouseEvent &event) override {
@@ -656,6 +726,13 @@ private:
     disclaimerDetailLabel.setText(strings.disclaimerLine2,
                                   juce::dontSendNotification);
     releasesLinkButton.setButtonText(strings.releasesLink);
+    homepageLinkButton.setButtonText(
+        isJapaneseLanguageCode(languageCode) ? juce::String::fromUTF8("\u30db\u30fc\u30e0\u30da\u30fc\u30b8")
+                                             : "Homepage");
+    xLinkButton.setButtonText(
+        isJapaneseLanguageCode(languageCode) ? juce::String::fromUTF8("X (旧Twitter)")
+                                             : "Twitter / X");
+    youtubeLinkButton.setButtonText("YouTube");
     refreshUpdateStatusText();
     resized();
     repaint();
@@ -723,6 +800,10 @@ private:
   juce::Label disclaimerLabel;
   juce::Label disclaimerDetailLabel;
   juce::TextButton releasesLinkButton;
+  juce::TextButton homepageLinkButton;
+  juce::TextButton xLinkButton;
+  juce::TextButton youtubeLinkButton;
+  juce::Label socialDot1, socialDot2;
   bool isCheckingForUpdates = false;
   juce::String languageCode {"en"};
   UpdateStatus updateStatus {UpdateStatus::currentVersion};
@@ -823,14 +904,18 @@ private:
 
     state.scale = mapOutputScale(outputGain);
     const auto &strings = getStringsForCode(getLanguageCode());
-    state.allCaps =
-        strings.allowTitleAllCaps &&
+    const bool maxOutputGain =
         outputGain.value >=
-            (outputGain.max - juce::jmax(0.0001f,
-                                         (outputGain.max - outputGain.min) *
-                                             0.001f));
+        (outputGain.max - juce::jmax(0.0001f,
+                                     (outputGain.max - outputGain.min) *
+                                         0.001f));
+    state.allCaps = strings.allowTitleAllCaps && maxOutputGain;
     state.trailingWord = bypassed ? strings.titleBypassTrailingWord
                                   : strings.titleTrailingWord;
+
+    if (isJapaneseLanguageCode(getLanguageCode()) && maxOutputGain)
+      state.trailingWord << "!!!";
+
     state.letterTracking =
         mapLetterTracking(leftPanAmount.value, rightPanAmount.value, flipPan,
                           state.scale);
@@ -1043,6 +1128,10 @@ juce::Font CustomLookAndFeel::getTextButtonFont(juce::TextButton &button,
     return japanese ? makeMultilingualSansFont(10.8f)
                     : makeHelveticaFont(11.5f);
 
+  if (button.getProperties().getWithDefault("settingsReset", false))
+    return juce::Font(
+        juce::FontOptions(static_cast<float>(buttonHeight) * 0.96f));
+
   return japanese
              ? makeMultilingualSansFont(static_cast<float>(buttonHeight) * 0.46f,
                                         juce::Font::bold)
@@ -1078,8 +1167,22 @@ void CustomLookAndFeel::drawButtonBackground(
     return;
   }
 
-  if (button.getProperties().getWithDefault("settingsLink", false))
+  if (button.getProperties().getWithDefault("settingsReset", false))
+  {
     return;
+  }
+
+  if (button.getProperties().getWithDefault("settingsLink", false)) {
+    if (shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown) {
+      auto font = isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(10.8f)
+                                                       : makeHelveticaFont(11.5f);
+      float textWidth = measureTextWidth(font, button.getButtonText());
+      float underlineY = button.getLocalBounds().toFloat().getCentreY() + font.getHeight() * 0.42f;
+      g.setColour(juce::Colours::white.withAlpha(shouldDrawButtonAsDown ? 0.65f : 0.50f));
+      g.drawLine(0.0f, underlineY, textWidth, underlineY, 1.0f);
+    }
+    return;
+  }
 
   auto bounds = button.getLocalBounds().toFloat();
   auto fill = backgroundColour;
@@ -1132,6 +1235,7 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
   g.setColour(colour);
   g.setFont(getTextButtonFont(button, button.getHeight()));
   const bool isClose = button.getProperties().getWithDefault("settingsClose", false);
+  const bool isReset = button.getProperties().getWithDefault("settingsReset", false);
   const bool isSettingsAction =
       button.getProperties().getWithDefault("settingsAction", false);
   const bool isSettingsLink =
@@ -1142,12 +1246,31 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
   if (isClose)
     return;
 
+  if (isReset) {
+    auto iconColour = juce::Colours::white.withAlpha(
+        shouldDrawButtonAsDown ? 0.85f
+                               : (shouldDrawButtonAsHighlighted ? 0.65f
+                                                                : 0.40f));
+    g.setColour(iconColour);
+    auto font = getTextButtonFont(button, button.getHeight());
+    const auto bounds = button.getLocalBounds().toFloat();
+    const float scale = shouldDrawButtonAsDown ? 0.9f : 1.0f;
+
+    g.addTransform(juce::AffineTransform::scale(
+                       scale, scale, bounds.getCentreX(), bounds.getCentreY())
+                       .translated(0.0f, shouldDrawButtonAsDown ? 0.5f : 0.0f));
+    g.setFont(font);
+    g.drawText(button.getButtonText(), bounds,
+               juce::Justification::centred, false);
+    return;
+  }
+
   const auto justification =
-      isSettingsAction ? juce::Justification::centred
+      (isSettingsAction || isReset) ? juce::Justification::centred
                        : juce::Justification::centredLeft;
   g.drawText(button.getButtonText(),
              button.getLocalBounds().toFloat().reduced(
-                 (isSettingsAction || isSettingsLink) ? 0.0f
+                 (isSettingsAction || isSettingsLink || isReset) ? 0.0f
                                                       : (isSettingsCombo ? 12.0f
                                                                          : 12.0f),
                  0.0f),
@@ -1168,11 +1291,63 @@ juce::Label *CustomLookAndFeel::createSliderTextBox(juce::Slider &slider) {
 
 void CustomLookAndFeel::drawTooltip(juce::Graphics &g, const juce::String &text,
                                     int width, int height) {
-  g.fillAll(juce::Colour::fromString("#E0222222")); // Dark subtle backdrop
-  g.setColour(juce::Colours::white);
-  g.setFont(isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(13.0f)
-                                                 : makeHelveticaFont(14.0f));
-  g.drawText(text, 0, 0, width, height, juce::Justification::centred, true);
+  const float padX = 10.0f;
+  const float padY = 8.0f;
+
+  // Fully opaque background, sharp corners
+  g.fillAll(juce::Colour::fromString("#FF506E7A"));
+
+  // Subtle border
+  g.setColour(juce::Colours::white.withAlpha(0.12f));
+  g.drawRect(0, 0, width, height, 1);
+
+  // Multi-line text via TextLayout
+  auto font = isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(12.0f)
+                                                   : makeHelveticaFont(12.5f);
+  juce::AttributedString attStr;
+  attStr.append(text, font, juce::Colours::white);
+  attStr.setJustification(juce::Justification::centredLeft);
+  attStr.setWordWrap(juce::AttributedString::WordWrap::byWord);
+
+  juce::TextLayout layout;
+  layout.createLayout(attStr, static_cast<float>(width) - padX * 2.0f);
+  layout.draw(g, juce::Rectangle<float>(padX, padY,
+                                         static_cast<float>(width) - padX * 2.0f,
+                                         static_cast<float>(height) - padY * 2.0f));
+}
+
+juce::Rectangle<int> CustomLookAndFeel::getTooltipBounds(
+    const juce::String &tipText, juce::Point<int> screenPos,
+    juce::Rectangle<int> parentArea) {
+  const float padX = 10.0f;
+  const float padY = 8.0f;
+  const float maxTextWidth = 250.0f;
+
+  auto font = isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(12.0f)
+                                                   : makeHelveticaFont(12.5f);
+  juce::AttributedString attStr;
+  attStr.append(tipText, font, juce::Colours::white);
+  attStr.setWordWrap(juce::AttributedString::WordWrap::byWord);
+
+  juce::TextLayout layout;
+  layout.createLayout(attStr, maxTextWidth);
+
+  const int tipW = juce::jmin(static_cast<int>(std::ceil(layout.getWidth() + padX * 2.0f + 2.0f)),
+                              static_cast<int>(maxTextWidth + padX * 2.0f + 2.0f));
+  const int tipH = static_cast<int>(std::ceil(layout.getHeight() + padY * 2.0f + 2.0f));
+
+  // Position below cursor, clamp to parent area
+  int x = screenPos.x;
+  int y = screenPos.y + 22;
+
+  if (x + tipW > parentArea.getRight())
+    x = parentArea.getRight() - tipW;
+  if (x < parentArea.getX())
+    x = parentArea.getX();
+  if (y + tipH > parentArea.getBottom())
+    y = screenPos.y - tipH - 6;
+
+  return {x, y, tipW, tipH};
 }
 
 void CustomLookAndFeel::drawCallOutBoxBackground(juce::CallOutBox &,
@@ -1421,6 +1596,14 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   settingsButton.setBorderSize(juce::BorderSize<int>(2));
   settingsButton.onClick = [this] { showSettingsPopup(); };
 
+  addAndMakeVisible(resetDefaultsButton);
+  resetDefaultsButton.getProperties().set("settingsReset", true);
+  resetDefaultsButton.setButtonText(juce::String::fromUTF8("\xE2\x86\xBA"));
+  resetDefaultsButton.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+  resetDefaultsButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+  resetDefaultsButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.4f));
+  resetDefaultsButton.onClick = [this] { resetAllParameters(); };
+
   applyLocalisation();
   updateHaasCompVisualState(
       audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
@@ -1432,6 +1615,13 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
 }
 
 VocalWidenerEditor::~VocalWidenerEditor() { setLookAndFeel(nullptr); }
+
+void VocalWidenerEditor::resetAllParameters() {
+  for (auto *param : audioProcessor.getParameters()) {
+    if (auto *ranged = dynamic_cast<juce::RangedAudioParameter *>(param))
+      ranged->setValueNotifyingHost(ranged->getDefaultValue());
+  }
+}
 
 void VocalWidenerEditor::setCurrentLanguageCode(
     const juce::String &newLanguageCode) {
@@ -1477,6 +1667,7 @@ void VocalWidenerEditor::applyLocalisation() {
   linkPanToggle.setTooltip(strings.tooltipLinkPan);
   flipPanToggle.setTooltip(strings.tooltipFlipPan);
   settingsButton.setTooltip(strings.tooltipSettings);
+  resetDefaultsButton.setTooltip(strings.tooltipResetDefaults);
 
   latencyLabel.setText(strings.reportedLatencyPrefix + "0.00 ms",
                        juce::dontSendNotification);
@@ -1703,6 +1894,7 @@ void VocalWidenerEditor::resized() {
   const int footerY = getHeight() - 34;
   latencyLabel.setBounds(leftMargin, footerY - 1, 180, 20);
   settingsButton.setBounds(getWidth() - 34, footerY, 18, 18);
+  resetDefaultsButton.setBounds(getWidth() - 36, footerY - 26, 22, 22);
   versionLabel.setBounds(getWidth() - 142, footerY - 1, 100, 20);
 
   if (isJapaneseLanguageCode(currentLanguageCode)) {

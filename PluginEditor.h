@@ -25,6 +25,7 @@ public:
     juce::Font getPopupMenuFont() override;
     
     void drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height) override;
+    juce::Rectangle<int> getTooltipBounds (const juce::String& tipText, juce::Point<int> screenPos, juce::Rectangle<int> parentArea) override;
     void drawCallOutBoxBackground (juce::CallOutBox&, juce::Graphics&, const juce::Path&, juce::Image&) override;
     int getCallOutBoxBorderSize (const juce::CallOutBox&) override;
     float getCallOutBoxCornerSize (const juce::CallOutBox&) override;
@@ -116,6 +117,8 @@ private:
                                        juce::Colours::white.withAlpha(0.4f),
                                        juce::Colours::white.withAlpha(0.65f),
                                        juce::Colours::white.withAlpha(0.85f) };
+    juce::TextButton resetDefaultsButton;
+    void resetAllParameters();
     juce::String currentLanguageCode { "en" };
     
     // Dynamic readouts
