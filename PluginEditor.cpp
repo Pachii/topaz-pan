@@ -549,7 +549,7 @@ public:
 
     setupSocialLink(homepageLinkButton, "https://toopazu.net");
     setupSocialLink(xLinkButton, "https://x.com/toopazu");
-    setupSocialLink(youtubeLinkButton, "https://www.youtube.com/@10pazu");
+    setupSocialLink(youtubeLinkButton, "https://www.youtube.com/@toopazu");
 
     for (auto *dot : { &socialDot1, &socialDot2 }) {
       dot->setText(juce::CharPointer_UTF8("\xc2\xb7"), juce::dontSendNotification);
