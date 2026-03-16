@@ -52,6 +52,12 @@ juce_generate_juce_header(AbstractWidener)
 
 target_compile_features(AbstractWidener PUBLIC cxx_std_20)
 
+target_compile_definitions(AbstractWidener PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+)
+
 # Optional IDE grouping for cleaner structure
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
     PluginProcessor.cpp
