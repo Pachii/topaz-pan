@@ -5,96 +5,206 @@
 //==============================================================================
 namespace dsp_utils 
 {
-    // A classic dual-window time-domain micro pitch shifter
-    class MicroPitchShifter
+    class AdtDriftVoice
     {
     public:
-        void prepare(double sampleRate, float windowMs = 30.0f) {
+        void prepare(double sampleRate, float maxDelayMs, int randomSeed) {
             fs = sampleRate;
-            windowSamples = (windowMs * fs) / 1000.0;
-            buffer.setSize(1, static_cast<int>(windowSamples * 2.0) + 100);
+            buffer.setSize(1, static_cast<int>((maxDelayMs * fs) / 1000.0) + 16);
+            random.setSeed(randomSeed);
             reset();
         }
 
         void reset() {
             buffer.clear();
             writePos = 0;
-            phase = 0.0;
-            deltaPhase = 0.0;
+            centerDelaySamples = 0.0;
+            currentDelaySamples = 0.0;
+            segmentStartDelaySamples = 0.0;
+            segmentTargetDelaySamples = 0.0;
+            segmentLengthSamples = 0;
+            segmentProgressSamples = 0;
+            maxDriftCents = 0.0f;
+            currentDriftCents = 0.0f;
         }
 
-        void setPitchOffsetCents(float cents) {
-            if (std::abs(cents) < 0.01f) {
-                deltaPhase = 0.0;
-                // Zero cents should always land on the neutral half-window read.
-                phase = 0.0;
-            } else {
-                double speedRatio = std::pow(2.0, cents / 1200.0);
-                deltaPhase = (1.0 - speedRatio) / windowSamples;
+        void configure(float baseDelayMs, float sharedDelayBaseMs,
+                       float maxDriftCentsToUse) {
+            centerDelaySamples =
+                ((baseDelayMs + sharedDelayBaseMs) * fs) / 1000.0;
+            maxDriftCents = juce::jmax(0.0f, maxDriftCentsToUse);
+
+            if (maxDriftCents < 0.01f) {
+                currentDelaySamples = centerDelaySamples;
+                segmentStartDelaySamples = centerDelaySamples;
+                segmentTargetDelaySamples = centerDelaySamples;
+                segmentLengthSamples = 0;
+                segmentProgressSamples = 0;
+                currentDriftCents = 0.0f;
+                return;
             }
+
+            const double maxSpeedDelta =
+                std::abs(1.0 - std::pow(2.0, maxDriftCents / 1200.0));
+            maxExcursionSamples =
+                juce::jmax(1.0, maxSpeedDelta * (maxSegmentSeconds * fs) /
+                                    smoothstepPeakSlope);
+
+            if (segmentLengthSamples <= 0) {
+                currentDelaySamples = centerDelaySamples;
+                startNewSegment();
+                return;
+            }
+
+            const double minDelay = centerDelaySamples - maxExcursionSamples;
+            const double maxDelay = centerDelaySamples + maxExcursionSamples;
+
+            currentDelaySamples = juce::jlimit(minDelay, maxDelay,
+                                               currentDelaySamples);
+            segmentStartDelaySamples = juce::jlimit(minDelay, maxDelay,
+                                                    segmentStartDelaySamples);
+            segmentTargetDelaySamples = juce::jlimit(minDelay, maxDelay,
+                                                     segmentTargetDelaySamples);
         }
 
         float processSample(float in) {
-            if (windowSamples <= 0.0) return in;
-
             auto* writePtr = buffer.getWritePointer(0);
             const int bufferSize = buffer.getNumSamples();
             writePtr[writePos] = in;
 
-            auto readInterp = [&](double p) {
-                double delay = p * windowSamples;
-                double readPos = static_cast<double>(writePos) - delay;
-                if (readPos < 0.0) readPos += bufferSize;
-
-                int idx1 = static_cast<int>(readPos);
-                int idx2 = (idx1 + 1) % bufferSize;
-                double frac = readPos - idx1;
-                return writePtr[idx1] * (1.0f - static_cast<float>(frac)) + writePtr[idx2] * static_cast<float>(frac);
-            };
-
-            auto getTriangleGain = [](double p) {
-                return static_cast<float>(p < 0.5 ? 2.0 * p : 2.0 * (1.0 - p));
-            };
-
-            if (std::abs(deltaPhase) < 1.0e-9) {
-                const float out = readInterp(0.5);
+            if (maxDriftCents < 0.01f && centerDelaySamples <= 0.001) {
                 writePos = (writePos + 1) % bufferSize;
-                return out;
+                currentDriftCents = 0.0f;
+                return in;
             }
 
-            double phase2 = std::fmod(phase + 0.5, 1.0);
-            
-            float s1 = readInterp(phase);
-            float s2 = readInterp(phase2);
-            float g1 = getTriangleGain(phase);
-            float g2 = getTriangleGain(phase2);
+            if (maxDriftCents < 0.01f) {
+                currentDelaySamples = centerDelaySamples;
+                currentDriftCents = 0.0f;
+            } else {
+                if (segmentLengthSamples <= 0 ||
+                    segmentProgressSamples >= segmentLengthSamples)
+                    startNewSegment();
 
-            float out = (s1 * g1) + (s2 * g2);
+                const double t = juce::jlimit(
+                    0.0, 1.0,
+                    static_cast<double>(segmentProgressSamples) /
+                        static_cast<double>(segmentLengthSamples));
+                const double eased = (t * t) * (3.0 - (2.0 * t));
+                const double easedDerivative =
+                    (6.0 * t * (1.0 - t)) /
+                    static_cast<double>(segmentLengthSamples);
+                const double delaySpan =
+                    segmentTargetDelaySamples - segmentStartDelaySamples;
+
+                currentDelaySamples =
+                    segmentStartDelaySamples + (delaySpan * eased);
+
+                const double delayDeltaPerSample =
+                    delaySpan * easedDerivative;
+                const double speedRatio =
+                    juce::jmax(1.0e-6, 1.0 - delayDeltaPerSample);
+                currentDriftCents =
+                    static_cast<float>(1200.0 * std::log2(speedRatio));
+
+                ++segmentProgressSamples;
+            }
+
+            double readPos = static_cast<double>(writePos) - currentDelaySamples;
+            while (readPos < 0.0)
+                readPos += static_cast<double>(bufferSize);
+            while (readPos >= static_cast<double>(bufferSize))
+                readPos -= static_cast<double>(bufferSize);
+
+            const int idx1 = static_cast<int>(readPos);
+            const float frac = static_cast<float>(readPos - idx1);
+            const auto sampleAt = [&](int index) {
+                while (index < 0)
+                    index += bufferSize;
+                while (index >= bufferSize)
+                    index -= bufferSize;
+                return writePtr[index];
+            };
+
+            const float y0 = sampleAt(idx1 - 1);
+            const float y1 = sampleAt(idx1);
+            const float y2 = sampleAt(idx1 + 1);
+            const float y3 = sampleAt(idx1 + 2);
+
+            const float c0 = y1;
+            const float c1 = 0.5f * (y2 - y0);
+            const float c2 = y0 - (2.5f * y1) + (2.0f * y2) - (0.5f * y3);
+            const float c3 = (0.5f * (y3 - y0)) + (1.5f * (y1 - y2));
+
+            const float out =
+                ((c3 * frac + c2) * frac + c1) * frac + c0;
 
             writePos = (writePos + 1) % bufferSize;
-            phase += deltaPhase;
-            if (phase >= 1.0) phase -= 1.0;
-            else if (phase < 0.0) phase += 1.0;
-
             return out;
         }
 
-        float processBypassedSample(float in) {
-            if (windowSamples <= 0.0) return in;
+        float getCurrentDriftCents() const { return currentDriftCents; }
 
-            auto* writePtr = buffer.getWritePointer(0);
-            const int bufferSize = buffer.getNumSamples();
-            writePtr[writePos] = in;
-            writePos = (writePos + 1) % bufferSize;
-            return in;
+        float getSharedLatencyMs() const {
+            return static_cast<float>((maxExcursionSamples * 1000.0) / fs);
         }
 
     private:
+        void startNewSegment() {
+            if (maxDriftCents < 0.01f || fs <= 0.0) {
+                segmentLengthSamples = 0;
+                segmentProgressSamples = 0;
+                segmentStartDelaySamples = centerDelaySamples;
+                segmentTargetDelaySamples = centerDelaySamples;
+                currentDelaySamples = centerDelaySamples;
+                currentDriftCents = 0.0f;
+                return;
+            }
+
+            const int minSamples = juce::jmax(
+                1, juce::roundToInt(minSegmentSeconds * static_cast<float>(fs)));
+            const int maxSamples = juce::jmax(
+                minSamples + 1,
+                juce::roundToInt(maxSegmentSeconds * static_cast<float>(fs)));
+
+            segmentLengthSamples = minSamples +
+                                   random.nextInt(maxSamples - minSamples + 1);
+            segmentProgressSamples = 0;
+            segmentStartDelaySamples = currentDelaySamples;
+
+            const double maxSpeedDelta =
+                std::abs(1.0 - std::pow(2.0, maxDriftCents / 1200.0));
+            const double maxStepSamples =
+                (maxSpeedDelta * static_cast<double>(segmentLengthSamples)) /
+                smoothstepPeakSlope;
+            const double minDelay = centerDelaySamples - maxExcursionSamples;
+            const double maxDelay = centerDelaySamples + maxExcursionSamples;
+            const double unclampedTarget =
+                currentDelaySamples +
+                juce::jmap(random.nextFloat(), -static_cast<float>(maxStepSamples),
+                           static_cast<float>(maxStepSamples));
+
+            segmentTargetDelaySamples =
+                juce::jlimit(minDelay, maxDelay, unclampedTarget);
+        }
+
+        static constexpr float minSegmentSeconds = 0.35f;
+        static constexpr float maxSegmentSeconds = 1.25f;
+        static constexpr double smoothstepPeakSlope = 1.5;
+
         juce::AudioBuffer<float> buffer;
+        juce::Random random;
         int writePos = 0;
         double fs = 44100.0;
-        double windowSamples = 0.0;
-        double phase = 0.0, deltaPhase = 0.0;
+        double centerDelaySamples = 0.0;
+        double currentDelaySamples = 0.0;
+        double segmentStartDelaySamples = 0.0;
+        double segmentTargetDelaySamples = 0.0;
+        double maxExcursionSamples = 0.0;
+        int segmentLengthSamples = 0;
+        int segmentProgressSamples = 0;
+        float maxDriftCents = 0.0f;
+        float currentDriftCents = 0.0f;
     };
 
     // Circular fraction delay
@@ -165,7 +275,7 @@ public:
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "Vocal Widener"; }
+    const juce::String getName() const override { return "topaz pan"; }
     static juce::String getVersionTag() { return "v0.2.0-alpha"; }
     static juce::URL getReleasesPageUrl() { return juce::URL("https://github.com/Pachii/topaz-pan/releases"); }
     static juce::URL getLatestReleaseApiUrl() { return juce::URL("https://api.github.com/repos/Pachii/topaz-pan/releases/latest"); }
@@ -196,7 +306,6 @@ public:
     std::atomic<float>* leftPanParam = nullptr;
     std::atomic<float>* rightPanParam = nullptr;
     std::atomic<float>* centeredTimingParam = nullptr;
-    std::atomic<float>* equalPitchShiftParam = nullptr;
     std::atomic<float>* pitchDiffParam = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
     std::atomic<float>* bypassParam = nullptr;
@@ -223,9 +332,9 @@ public:
 private:
     static constexpr float maxOffsetMs = 50.0f;
     static constexpr float maxCenteredRightDelayMs = maxOffsetMs * 1.5f;
-    static constexpr float pitchWindowMs = 30.0f;
-    static constexpr float pitchLatencyMs = pitchWindowMs * 0.5f;
-    static constexpr float maxReportedLatencyMs = pitchLatencyMs + (maxOffsetMs * 0.5f);
+    static constexpr float maxAdtSharedLatencyMs = 10.5f;
+    static constexpr float maxReportedLatencyMs =
+        maxAdtSharedLatencyMs + (maxOffsetMs * 0.5f);
 
     class IntegerDelay
     {
@@ -268,9 +377,11 @@ private:
 
     void handleAsyncUpdate() override;
     int computeLatencySamples(float offsetMs, bool centered,
-                              bool pitchShiftActive) const;
+                              float driftAmountCents) const;
     void queueLatencyUpdate(int latencySamples);
     bool isPitchShiftActive(float pitchDiffCents) const;
+    float computeAdtSharedLatencyMs(float driftAmountCents) const;
+    std::pair<float, float> computeVoiceDriftAmounts(float driftAmountCents) const;
 
     float currentLeftCompDb = 0.0f;
     float currentRightCompDb = 0.0f;
@@ -280,8 +391,7 @@ private:
     bool wasPitchShiftActive = false;
     juce::String languageCode {"en"};
 
-    dsp_utils::SmoothedDelay delayLeft, delayRight;
-    dsp_utils::MicroPitchShifter pitchLeft, pitchRight;
+    dsp_utils::AdtDriftVoice voiceLeft, voiceRight;
     IntegerDelay dryDelayLeft, dryDelayRight;
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

@@ -215,7 +215,6 @@ struct LocalizedStrings {
   juce::String haasComp;
   juce::String outputGain;
   juce::String equalDelay;
-  juce::String equalPitchShift;
   juce::String linkPan;
   juce::String flipPan;
   juce::String bypass;
@@ -227,7 +226,6 @@ struct LocalizedStrings {
   juce::String tooltipHaasAmount;
   juce::String tooltipOutputGain;
   juce::String tooltipEqualDelay;
-  juce::String tooltipEqualPitchShift;
   juce::String tooltipLinkPan;
   juce::String tooltipFlipPan;
   juce::String tooltipSettings;
@@ -290,22 +288,20 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "offset time",
       "left pan",
       "right pan",
-      "pitch shift",
+      "adt drift",
       "haas comp",
       "output gain",
       "equal delay",
-      "equal pitch shift",
       "link pan",
       "flip pan",
       "bypass",
       "sets the delay between the left and right channels",
       "sets how far left the left voice sits",
       "sets how far right the right voice sits",
-      "adds subtle pitch separation between channels",
+      "adds ADT-style drift and decorrelation between channels",
       "balances perceived loudness when channels are delayed",
       "controls the final output volume",
       "offsets delay equally across both channels",
-      "splits pitch shift evenly between negative left and positive right",
       "locks both pan amounts together",
       "swaps the left and right pan destinations",
       "settings",
@@ -325,7 +321,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "left channel",
       "right channel",
       "delay",
-      "pitch",
+      "drift",
       "latency: ",
       "haas precedence: ",
       "off",
@@ -335,7 +331,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "ambiguous",
       "left gain",
       "right gain",
-      "Warning: Plugin requires a Stereo track layout to function properly."};
+      "Warning: Plugin requires mono or stereo input with stereo output."};
 
   static const LocalizedStrings japanese {
       juce::String::fromUTF8("とぱず"),
@@ -346,22 +342,20 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("オフセット時間"),
       juce::String::fromUTF8("左パン"),
       juce::String::fromUTF8("右パン"),
-      juce::String::fromUTF8("ピッチシフト"),
+      juce::String::fromUTF8("ADTドリフト"),
       juce::String::fromUTF8("ハース補正"),
       juce::String::fromUTF8("出力ゲイン"),
       juce::String::fromUTF8("均等ディレイ"),
-      juce::String::fromUTF8("均等ピッチ"),
       juce::String::fromUTF8("パンリンク"),
       juce::String::fromUTF8("パン反転"),
       juce::String::fromUTF8("バイパス"),
       juce::String::fromUTF8("左右チャンネルの時間差を設定します"),
       juce::String::fromUTF8("左側の声をどこまで左に置くかを決めます"),
       juce::String::fromUTF8("右側の声をどこまで右に置くかを決めます"),
-      juce::String::fromUTF8("左右チャンネルに微小なピッチ差を加えます"),
+      juce::String::fromUTF8("左右チャンネルにADT風の微小ドリフトを加えます"),
       juce::String::fromUTF8("時間差で偏って聞こえる音量感を補正します"),
       juce::String::fromUTF8("最終的な出力音量を調整します"),
       juce::String::fromUTF8("左右の時間差を中央基準で扱います"),
-      juce::String::fromUTF8("左右に均等なピッチ差を付けます"),
       juce::String::fromUTF8("左右のパン量を連動させます"),
       juce::String::fromUTF8("左右のパン先を入れ替えます"),
       juce::String::fromUTF8("設定"),
@@ -381,7 +375,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("左チャンネル"),
       juce::String::fromUTF8("右チャンネル"),
       juce::String::fromUTF8("ディレイ"),
-      juce::String::fromUTF8("ピッチ"),
+      juce::String::fromUTF8("ドリフト"),
       juce::String::fromUTF8("レイテンシ: "),
       juce::String::fromUTF8("ハース先行: "),
       juce::String::fromUTF8("オフ"),
@@ -392,7 +386,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("左ゲイン"),
       juce::String::fromUTF8("右ゲイン"),
       juce::String::fromUTF8(
-          "警告: このプラグインはステレオトラックでのみ正しく動作します。")};
+          "警告: このプラグインはモノラルまたはステレオ入力、ステレオ出力で使用してください。")};
 
   return language == UILanguage::japanese ? japanese : english;
 }
@@ -1560,7 +1554,7 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   };
   setupUnitLabel(rightPanUnitLabel, "R");
 
-  setupSlider(pitchDiffSlider, pitchDiffLabel, "pitch shift", attPitchDiff,
+  setupSlider(pitchDiffSlider, pitchDiffLabel, "adt drift", attPitchDiff,
               "pitchDiff");
   pitchDiffSlider.textFromValueFunction = [](double value) {
     return formatPitchCents(value);
@@ -1594,11 +1588,6 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   attCentered =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "centeredTiming", centeredToggle);
-
-  addAndMakeVisible(equalPitchToggle);
-  attEqualPitch =
-      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-          audioProcessor.apvts, "equalPitchShift", equalPitchToggle);
 
   addAndMakeVisible(bypassToggle);
   attBypass =
@@ -1706,7 +1695,6 @@ void VocalWidenerEditor::applyLocalisation() {
   outGainLabel.setText(strings.outputGain, juce::dontSendNotification);
 
   centeredToggle.setButtonText(strings.equalDelay);
-  equalPitchToggle.setButtonText(strings.equalPitchShift);
   linkPanToggle.setButtonText(strings.linkPan);
   flipPanToggle.setButtonText(strings.flipPan);
   haasCompToggle.setButtonText(strings.haasComp);
@@ -1719,7 +1707,6 @@ void VocalWidenerEditor::applyLocalisation() {
   haasCompAmtLabel.setTooltip(strings.tooltipHaasAmount);
   outGainLabel.setTooltip(strings.tooltipOutputGain);
   centeredToggle.setTooltip(strings.tooltipEqualDelay);
-  equalPitchToggle.setTooltip(strings.tooltipEqualPitchShift);
   linkPanToggle.setTooltip(strings.tooltipLinkPan);
   flipPanToggle.setTooltip(strings.tooltipFlipPan);
   settingsButton.setTooltip(strings.tooltipSettings);
@@ -1930,15 +1917,14 @@ void VocalWidenerEditor::resized() {
   int colWidth = 160;
 
   centeredToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  equalPitchToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+  linkPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
   yStart += colH;
 
-  linkPanToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  flipPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+  flipPanToggle.setBounds(leftMargin, yStart, colWidth, colH);
+  haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
   yStart += colH;
 
-  haasCompToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  bypassToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+  bypassToggle.setBounds(leftMargin, yStart, colWidth, colH);
   yStart += colH + 20;
 
   leftReadout.setBounds(leftMargin, yStart, 180, 58);

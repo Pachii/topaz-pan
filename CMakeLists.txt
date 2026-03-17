@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.20)
 
 project(topaz_pan VERSION 0.2.0)
 
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 # ==============================================================================
 # Fetch JUCE automatically to make the project self-contained
 # ==============================================================================
@@ -57,6 +63,19 @@ target_compile_definitions(AbstractWidener PRIVATE
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
 )
+
+if(APPLE)
+    function(ad_hoc_sign_bundle target_name)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND /bin/sh -c "codesign --force --deep --sign - --timestamp=none \"$<TARGET_FILE_DIR:${target_name}>/../..\""
+            VERBATIM
+        )
+    endfunction()
+
+    ad_hoc_sign_bundle(AbstractWidener_Standalone)
+    ad_hoc_sign_bundle(AbstractWidener_VST3)
+    ad_hoc_sign_bundle(AbstractWidener_AU)
+endif()
 
 # Optional IDE grouping for cleaner structure
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES

@@ -102,10 +102,10 @@ private:
 
     ShiftSlider offsetSlider, rightPanSlider, pitchDiffSlider, outGainSlider, haasCompAmtSlider;
     MirroredSlider leftPanSlider;
-    juce::ToggleButton centeredToggle {"equal delay"}, equalPitchToggle {"equal pitch shift"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, flipPanToggle {"flip pan"}, haasCompToggle {"haas comp"};
+    juce::ToggleButton centeredToggle {"equal delay"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, flipPanToggle {"flip pan"}, haasCompToggle {"haas comp"};
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attOffset, attLeftPan, attRightPan, attPitchDiff, attOutGain, attHaasAmt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attEqualPitch, attBypass, attLinkPan, attFlipPan, attHaasEn;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attBypass, attLinkPan, attFlipPan, attHaasEn;
 
     juce::Label offsetLabel, leftPanLabel, rightPanLabel, pitchDiffLabel, outGainLabel, haasCompAmtLabel;
     juce::Label offsetUnitLabel, leftPanUnitLabel, rightPanUnitLabel, pitchDiffUnitLabel, haasCompAmtUnitLabel, outGainUnitLabel;
