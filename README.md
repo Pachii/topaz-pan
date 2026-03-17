@@ -153,12 +153,19 @@ Downloads are available on the [releases page](https://github.com/Pachii/topaz-p
 
 - **VST3**: `C:\Program Files\Common Files\VST3`
 
+### Linux
+
+- **VST3**: `~/.vst3` or `~/.local/share/vst3`
+
+Linux builds are currently provided as an experimental convenience and are **untested**.
+
 ### Installers
 
 Current releases include:
 
 - macOS installer for AU (Logic Pro) and VST3
 - Windows installer for VST3
+- Linux `.zip` downloads for VST3
 - `.zip` downloads for manual plugin installation
 
 ---
@@ -180,6 +187,7 @@ cmake --build build --config Release
 - a C++20-capable toolchain
 - macOS: Xcode / Apple Clang
 - Windows: Visual Studio / MSVC recommended for JUCE plugin builds
+- Linux: GCC or Clang with the required X11 / audio development packages
 
 ### Build outputs
 
@@ -218,8 +226,11 @@ They currently include:
 - macOS VST3
 - macOS AU
 - Windows VST3
+- Linux VST3
 - macOS installer
 - Windows installer
+
+The Linux build is currently **untested**.
 
 ---
 

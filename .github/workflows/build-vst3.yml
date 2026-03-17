@@ -87,6 +87,91 @@ jobs:
           path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-windows-installer.exe
           if-no-files-found: error
 
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            pkg-config \
+            zip \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            libfreetype6-dev \
+            libfontconfig1-dev \
+            libx11-dev \
+            libxcomposite-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libgtk-3-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev
+
+      - name: Set version
+        run: |
+          version="${{ github.ref_name }}"
+          if [ -z "$version" ] || [ "$version" = "main" ]; then
+            version="$(sed -n 's/.*getVersionTag() { return "\(.*\)"; }.*/\1/p' PluginProcessor.h | head -n 1)"
+          fi
+
+          if [ -z "$version" ]; then
+            echo "Could not determine plugin version from PluginProcessor.h" >&2
+            exit 1
+          fi
+
+          echo "PLUGIN_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja
+
+      - name: Build Linux VST3
+        run: cmake --build build --target AbstractWidener_VST3
+
+      - name: Collect Linux artifacts
+        run: |
+          mkdir -p dist
+
+          vst3_src=""
+          for candidate in \
+            "build/AbstractWidener_artefacts/Release/VST3/topaz pan.vst3" \
+            "build/AbstractWidener_artefacts/VST3/topaz pan.vst3"
+          do
+            if [ -e "$candidate" ]; then
+              vst3_src="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$vst3_src" ]; then
+            echo "Could not find built Linux VST3 artifact." >&2
+            exit 1
+          fi
+
+          cp -R "$vst3_src" "dist/topaz pan.vst3"
+
+          (
+            cd dist
+            zip -r "topaz-pan-${PLUGIN_VERSION}-linux-vst3.zip" "topaz pan.vst3"
+          )
+
+      - name: Upload Linux VST3 zip
+        uses: actions/upload-artifact@v6
+        with:
+          name: topaz-pan-${{ env.PLUGIN_VERSION }}-linux-vst3
+          path: dist/topaz-pan-${{ env.PLUGIN_VERSION }}-linux-vst3.zip
+          if-no-files-found: error
+
   build-macos:
     runs-on: macos-latest
 
