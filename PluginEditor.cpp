@@ -11,27 +11,83 @@ constexpr int unitLabelWidth = 34;
 constexpr int titleAreaHeight = 54;
 constexpr float titleAreaHorizontalPadding = 4.0f;
 
-juce::Font makeHelveticaFont(float height,
+const juce::StringArray &getAvailableTypefaceNames() {
+  static const juce::StringArray names = juce::Font::findAllTypefaceNames();
+  return names;
+}
+
+bool hasTypeface(const juce::String &name) {
+  for (const auto &availableName : getAvailableTypefaceNames())
+    if (availableName.equalsIgnoreCase(name))
+      return true;
+
+  return false;
+}
+
+juce::String chooseTypeface(std::initializer_list<const char *> candidates) {
+  for (const auto *candidate : candidates)
+    if (hasTypeface(candidate))
+      return candidate;
+
+  return {};
+}
+
+juce::Font makePlatformFont(const juce::String &primaryName,
+                            std::initializer_list<const char *> fallbacks,
+                            float height, int styleFlags = juce::Font::plain) {
+  juce::Font font(primaryName.isNotEmpty()
+                      ? juce::FontOptions(primaryName, height, styleFlags)
+                      : juce::FontOptions(height, styleFlags));
+
+  juce::StringArray fallbackNames;
+  for (const auto *fallback : fallbacks)
+    if (hasTypeface(fallback) && !fallbackNames.contains(fallback))
+      fallbackNames.add(fallback);
+
+  if (fallbackNames.size() > 0)
+    font.setPreferredFallbackFamilies(fallbackNames);
+
+  return font;
+}
+
+juce::Font makeEnglishUIFont(float height,
                              int styleFlags = juce::Font::plain) {
-  const bool bold = (styleFlags & juce::Font::bold) != 0;
-#if JUCE_MAC
-  return juce::Font(juce::FontOptions(bold ? "Hiragino Sans W7"
-                                           : "Hiragino Sans W5",
-                                      height, styleFlags));
-#elif JUCE_WINDOWS
-  return juce::Font(juce::FontOptions(bold ? "Yu Gothic UI Bold"
-                                           : "Yu Gothic UI Semibold",
-                                      height, styleFlags));
-#else
-  return juce::Font(juce::FontOptions(bold ? "Noto Sans CJK JP Bold"
-                                           : "Noto Sans CJK JP Medium",
-                                      height, styleFlags));
-#endif
+  return makePlatformFont("Helvetica Neue",
+                          {"Arial", "Segoe UI", "Liberation Sans"},
+                          height, styleFlags);
 }
 
 juce::Font makeMultilingualSansFont(float height,
                                     int styleFlags = juce::Font::plain) {
-  return makeHelveticaFont(height, styleFlags);
+  const bool bold = (styleFlags & juce::Font::bold) != 0;
+#if JUCE_MAC
+  const auto primary =
+      chooseTypeface({bold ? "Hiragino Sans W7" : "Hiragino Sans W5",
+                      "Hiragino Sans", "Helvetica Neue"});
+  return makePlatformFont(primary, {"Hiragino Sans", "Helvetica Neue", "Arial"},
+                          height, styleFlags);
+#elif JUCE_WINDOWS
+  const auto primary =
+      chooseTypeface({bold ? "Yu Gothic UI Semibold" : "Yu Gothic UI",
+                      "Meiryo UI", "Meiryo", "Segoe UI"});
+  return makePlatformFont(primary,
+                          {"Yu Gothic UI", "Meiryo UI", "Meiryo", "Segoe UI",
+                           "Arial Unicode MS", "Arial"},
+                          height, styleFlags);
+#else
+  const auto primary = chooseTypeface(
+      {bold ? "Noto Sans CJK JP Bold" : "Noto Sans CJK JP Medium",
+       "Noto Sans JP", "Noto Sans", "DejaVu Sans"});
+  return makePlatformFont(primary,
+                          {"Noto Sans CJK JP", "Noto Sans JP", "Noto Sans",
+                           "DejaVu Sans", "Liberation Sans"},
+                          height, styleFlags);
+#endif
+}
+
+juce::Font makeHelveticaFont(float height,
+                             int styleFlags = juce::Font::plain) {
+  return makeEnglishUIFont(height, styleFlags);
 }
 
 bool isJapaneseLanguageCode(const juce::String &languageCode) {
