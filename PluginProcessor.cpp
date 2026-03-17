@@ -3,6 +3,10 @@
 
 namespace {
 constexpr auto uiLanguageStateKey = "uiLanguage";
+constexpr float haasCompDeadZoneMs = 0.75f;
+constexpr float haasCompMaxEffectiveDelayMs = 20.0f;
+constexpr float haasCompTauMs = 5.0f;
+constexpr float haasCompMaxDbAt100Percent = 2.0f;
 }
 
 VocalWidenerProcessor::VocalWidenerProcessor()
@@ -263,19 +267,39 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   if (haasEnable) {
     float deltaMs = std::abs(delayTLeftMs - delayTRightMs);
-    if (deltaMs > 0.1f &&
+    if (deltaMs > haasCompDeadZoneMs &&
         hasMeaningfulPanSeparation) // Only correct if noticeably different
     {
-      // Exponential saturation model (tau = 8.0f)
-      float factor = 1.0f - std::exp(-deltaMs / 8.0f);
+      // Psychoacoustically motivated heuristic:
+      // - ignore sub-millisecond delays, where precedence is not yet a stable
+      //   lead-dominance problem for this use case
+      // - saturate over the first few milliseconds
+      // - stop growing once the delay is well into echo/splitting territory
+      const float effectiveDeltaMs =
+          juce::jlimit(0.0f, haasCompMaxEffectiveDelayMs - haasCompDeadZoneMs,
+                       deltaMs - haasCompDeadZoneMs);
+      const float factor = 1.0f - std::exp(-effectiveDeltaMs / haasCompTauMs);
 
-      // Hardcoded max dB = 2.0f
-      float compDb = factor * haasAmtNorm * 2.0f * panSeparationWeight;
+      // 100% corresponds to a 4 dB lead/lag differential. The existing
+      // 0-200% control therefore reaches 8 dB at the top end.
+      const float compDiffDb = factor * haasAmtNorm *
+                               haasCompMaxDbAt100Percent *
+                               panSeparationWeight;
+
+      // Convert the desired lead-vs-lag differential into constant-power path
+      // gains so the compensation acts like image balancing, not an accidental
+      // loudness knob.
+      const float gainRatio = juce::Decibels::decibelsToGain(compDiffDb);
+      const float earlyGain =
+          std::sqrt(2.0f / (1.0f + (gainRatio * gainRatio)));
+      const float lateGain = gainRatio * earlyGain;
+      const float earlyCompDb = juce::Decibels::gainToDecibels(earlyGain);
+      const float lateCompDb = juce::Decibels::gainToDecibels(lateGain);
 
       if (delayTLeftMs < delayTRightMs) {
         // Left structure is earlier
-        targetLeftCompDb = -0.5f * compDb;
-        targetRightCompDb = +0.5f * compDb;
+        targetLeftCompDb = earlyCompDb;
+        targetRightCompDb = lateCompDb;
 
         if (std::abs(leftPan - rightPan) < 0.05f)
           earlierPath = -1.0f;
@@ -283,8 +307,8 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
           earlierPath = (leftPan < rightPan) ? 0.0f : 1.0f;
       } else {
         // Right structure is earlier
-        targetLeftCompDb = +0.5f * compDb;
-        targetRightCompDb = -0.5f * compDb;
+        targetLeftCompDb = lateCompDb;
+        targetRightCompDb = earlyCompDb;
 
         if (std::abs(leftPan - rightPan) < 0.05f)
           earlierPath = -1.0f;
