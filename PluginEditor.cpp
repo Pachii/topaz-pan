@@ -50,17 +50,16 @@ juce::Font makePlatformFont(const juce::String &primaryName,
   return font;
 }
 
-juce::Font makeEnglishUIFont(float height,
-                             int styleFlags = juce::Font::plain) {
+juce::Font makeEnglishUIFont(float height, int styleFlags = juce::Font::plain) {
   return makePlatformFont("Helvetica Neue",
-                          {"Arial", "Segoe UI", "Liberation Sans"},
-                          height, styleFlags);
+                          {"Arial", "Segoe UI", "Liberation Sans"}, height,
+                          styleFlags);
 }
 
 juce::String chooseJapaneseUIFontFamily() {
 #if JUCE_MAC
-  return chooseTypeface({"Hiragino Sans", "Hiragino Kaku Gothic ProN",
-                         "Helvetica Neue"});
+  return chooseTypeface(
+      {"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Helvetica Neue"});
 #elif JUCE_WINDOWS
   return chooseTypeface(
       {"Meiryo UI", "Meiryo", "Yu Gothic UI", "Yu Gothic", "Segoe UI"});
@@ -80,10 +79,9 @@ juce::Font makeMultilingualSansFont(float height,
   return makePlatformFont(primary, {"Hiragino Sans", "Helvetica Neue", "Arial"},
                           height, styleFlags);
 #elif JUCE_WINDOWS
-  const auto primary =
-      chooseTypeface({"Meiryo UI", "Meiryo",
-                      bold ? "Yu Gothic UI Semibold" : "Yu Gothic UI",
-                      "Yu Gothic", "Segoe UI"});
+  const auto primary = chooseTypeface(
+      {"Meiryo UI", "Meiryo", bold ? "Yu Gothic UI Semibold" : "Yu Gothic UI",
+       "Yu Gothic", "Segoe UI"});
   return makePlatformFont(primary,
                           {"Meiryo UI", "Meiryo", "Yu Gothic UI", "Yu Gothic",
                            "Segoe UI", "Arial Unicode MS", "Arial"},
@@ -104,8 +102,8 @@ juce::Font makeJapaneseTitleFont(float height) {
   return makeMultilingualSansFont(height, juce::Font::bold);
 #elif JUCE_WINDOWS
   const auto primary =
-      chooseTypeface({"Yu Gothic UI Semibold", "Yu Gothic UI Bold",
-                      "Meiryo UI", "Meiryo", "Segoe UI"});
+      chooseTypeface({"Yu Gothic UI Semibold", "Yu Gothic UI Bold", "Meiryo UI",
+                      "Meiryo", "Segoe UI"});
   return makePlatformFont(primary,
                           {"Yu Gothic UI Semibold", "Yu Gothic UI", "Meiryo UI",
                            "Meiryo", "Segoe UI", "Arial Unicode MS"},
@@ -122,8 +120,7 @@ juce::Font makeJapaneseTitleFont(float height) {
 #endif
 }
 
-juce::Font makeHelveticaFont(float height,
-                             int styleFlags = juce::Font::plain) {
+juce::Font makeHelveticaFont(float height, int styleFlags = juce::Font::plain) {
   return makeEnglishUIFont(height, styleFlags);
 }
 
@@ -231,8 +228,10 @@ bool isUpdateAvailable(const juce::String &currentVersion,
   if (!current.valid || !latest.valid)
     return latestTag != currentTag;
 
-  if (latest.major != current.major) return latest.major > current.major;
-  if (latest.minor != current.minor) return latest.minor > current.minor;
+  if (latest.major != current.major)
+    return latest.major > current.major;
+  if (latest.minor != current.minor)
+    return latest.minor > current.minor;
   return latest.patch > current.patch;
 }
 
@@ -319,7 +318,7 @@ UILanguage languageForComboId(int comboId) {
 }
 
 const LocalizedStrings &getStrings(UILanguage language) {
-  static const LocalizedStrings english {
+  static const LocalizedStrings english{
       "topaz",
       "pan",
       "unpan",
@@ -339,10 +338,13 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "sets the delay between the left and right channels",
       "sets how far left the left voice sits",
       "sets how far right the right voice sits",
-      "adds ADT-style drift and decorrelation between channels. Experimental feature. Use this only if you have phasing issues.",
-      "controls how strongly the plugin compensates for the perceived level imbalance caused by channel delay. Experimental feature.",
+      "adds ADT-style drift and decorrelation between channels. Experimental "
+      "feature. Adds slight compensated latency.",
+      "controls how strongly the plugin compensates for the perceived level "
+      "imbalance caused by channel delay. Experimental feature.",
       "controls the final output volume",
-      "may or may not improve the perceived timing of vocals. Experimental feature. Adds slight latency.",
+      "may or may not improve the perceived timing of vocals. Experimental "
+      "feature. Adds slight compensated latency.",
       "locks both pan amounts together",
       "swaps the left and right pan destinations",
       "turns Haas compensation on or off. Experimental feature.",
@@ -376,7 +378,7 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "right voice gain",
       "Warning: Plugin requires mono or stereo input with stereo output."};
 
-  static const LocalizedStrings japanese {
+  static const LocalizedStrings japanese{
       juce::String::fromUTF8("とぱず"),
       juce::String::fromUTF8("パン"),
       juce::String::fromUTF8("パン"),
@@ -396,13 +398,19 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("左右のチャンネルに付ける時間差を調整します"),
       juce::String::fromUTF8("左側の音をどれだけ左に配置するかを調整します"),
       juce::String::fromUTF8("右側の音をどれだけ右に配置するかを調整します"),
-      juce::String::fromUTF8("左右チャンネルに微小なピッチの揺れとタイミングのズレを加えます。実験的機能です。位相感が気になる場合にだけ使ってください。"),
-      juce::String::fromUTF8("時間差で片側が大きく聞こえる印象を、どれだけ補正するかを調整します。実験的機能です。"),
+      juce::String::fromUTF8("左右チャンネルに微小なピッチの揺れとタイミングの"
+                             "ズレを加えます。実験的機能です。レイテンシーが発"
+                             "生しますが、ホスト側で自動補正されます。"),
+      juce::String::fromUTF8("時間差で片側が大きく聞こえる印象を、どれだけ補正"
+                             "するかを調整します。実験的機能です。"),
       juce::String::fromUTF8("最終的な出力レベルを調整します"),
-      juce::String::fromUTF8("ボーカルのタイミング感が改善して聞こえる場合があります。実験的機能です。わずかにレイテンシーが増えます。"),
+      juce::String::fromUTF8(
+          "ボーカルのタイミング感が改善して聞こえる場合があります。実験的機能で"
+          "す。レイテンシーが発生しますが、ホスト側で自動補正されます。"),
       juce::String::fromUTF8("左右のパン量を連動させます"),
       juce::String::fromUTF8("左右の配置を入れ替えます"),
-      juce::String::fromUTF8("ハース補正のオン / オフを切り替えます。実験的機能です。"),
+      juce::String::fromUTF8(
+          "ハース補正のオン / オフを切り替えます。実験的機能です。"),
       juce::String::fromUTF8("プラグイン全体をバイパスします"),
       juce::String::fromUTF8("設定"),
       juce::String::fromUTF8("設定を閉じる"),
@@ -415,7 +423,8 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("更新があります: "),
       juce::String::fromUTF8("最新版です"),
       juce::String::fromUTF8("アップデートを確認できませんでした"),
-      juce::String::fromUTF8("更新確認の結果が不完全または不正確な場合があります"),
+      juce::String::fromUTF8(
+          "更新確認の結果が不完全または不正確な場合があります"),
       juce::String::fromUTF8("必ず下のリンクから最新版も確認してください"),
       "GitHub Releases",
       juce::String::fromUTF8("左ボイス"),
@@ -431,8 +440,9 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("不明"),
       juce::String::fromUTF8("左ボイスゲイン"),
       juce::String::fromUTF8("右ボイスゲイン"),
-      juce::String::fromUTF8(
-          "警告: このプラグインはモノラルまたはステレオ入力、ステレオ出力で使用してください。")};
+      juce::String::fromUTF8("警告: "
+                             "このプラグインはモノラルまたはステレオ入力、ステ"
+                             "レオ出力で使用してください。")};
 
   return language == UILanguage::japanese ? japanese : english;
 }
@@ -451,9 +461,8 @@ juce::Path createSettingsGearPath() {
   for (int i = 0; i < 8; ++i) {
     path.addRoundedRectangle(
         spoke.transformedBy(juce::AffineTransform::rotation(
-                                juce::MathConstants<float>::twoPi *
-                                    (static_cast<float>(i) / 8.0f),
-                                centre.x, centre.y)),
+            juce::MathConstants<float>::twoPi * (static_cast<float>(i) / 8.0f),
+            centre.x, centre.y)),
         2.0f);
   }
 
@@ -461,8 +470,6 @@ juce::Path createSettingsGearPath() {
   path.addEllipse(37.0f, 37.0f, 26.0f, 26.0f);
   return path;
 }
-
-
 
 struct UpdateCheckResult {
   enum class Status { upToDate, updateAvailable, failed };
@@ -485,7 +492,8 @@ UpdateCheckResult fetchLatestRelease() {
           .withStatusCode(&statusCode);
 
   auto stream =
-      VocalWidenerProcessor::getLatestReleaseApiUrl().createInputStream(options);
+      VocalWidenerProcessor::getLatestReleaseApiUrl().createInputStream(
+          options);
 
   if (stream == nullptr)
     return result;
@@ -500,23 +508,25 @@ UpdateCheckResult fetchLatestRelease() {
   if (object == nullptr)
     return result;
 
-  const auto latestTag = normaliseVersionTag(object->getProperty("tag_name").toString());
+  const auto latestTag =
+      normaliseVersionTag(object->getProperty("tag_name").toString());
 
   if (latestTag.isEmpty())
     return result;
 
   result.latestTag = latestTag;
-  result.status = isUpdateAvailable(VocalWidenerProcessor::getVersionTag(),
-                                    latestTag)
-                      ? UpdateCheckResult::Status::updateAvailable
-                      : UpdateCheckResult::Status::upToDate;
+  result.status =
+      isUpdateAvailable(VocalWidenerProcessor::getVersionTag(), latestTag)
+          ? UpdateCheckResult::Status::updateAvailable
+          : UpdateCheckResult::Status::upToDate;
   return result;
 }
 
 class SettingsTitleComponent : public juce::Component {
 public:
   void setLanguageCode(const juce::String &newLanguageCode) {
-    languageCode = VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
+    languageCode =
+        VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
     repaint();
   }
 
@@ -552,8 +562,8 @@ public:
   }
 
 private:
-  juce::String languageCode {"en"};
-  juce::String titleText {"settings"};
+  juce::String languageCode{"en"};
+  juce::String titleText{"settings"};
 };
 
 class SettingsOverlay : public juce::Component {
@@ -569,7 +579,7 @@ public:
     setInterceptsMouseClicks(true, true);
     setOpaque(true);
 
-        addAndMakeVisible(titleGraphic);
+    addAndMakeVisible(titleGraphic);
 
     addAndMakeVisible(closeButton);
     closeButton.setButtonText("X");
@@ -577,18 +587,18 @@ public:
       if (onClose)
         onClose();
     };
-        closeButton.getProperties().set("settingsClose", true);
-        closeButton.setColour(juce::TextButton::buttonColourId,
-                              juce::Colours::transparentBlack);
+    closeButton.getProperties().set("settingsClose", true);
+    closeButton.setColour(juce::TextButton::buttonColourId,
+                          juce::Colours::transparentBlack);
     closeButton.setColour(juce::TextButton::buttonOnColourId,
                           juce::Colours::transparentBlack);
     closeButton.setColour(juce::TextButton::textColourOffId,
                           juce::Colours::white);
-    closeButton.setTooltip(getStringsForCode(initialLanguageCode).tooltipCloseSettings);
+    closeButton.setTooltip(
+        getStringsForCode(initialLanguageCode).tooltipCloseSettings);
 
     addAndMakeVisible(languageLabel);
-    languageLabel.setColour(juce::Label::textColourId,
-                            juce::Colours::white);
+    languageLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     languageLabel.setJustificationType(juce::Justification::centredLeft);
 
     addAndMakeVisible(languageButton);
@@ -601,31 +611,32 @@ public:
     languageButton.setColour(juce::TextButton::textColourOffId,
                              juce::Colours::white);
 
-        addAndMakeVisible(checkForUpdatesButton);
-        checkForUpdatesButton.onClick = [this] { beginUpdateCheck(); };
-        checkForUpdatesButton.getProperties().set("settingsAction", true);
-        checkForUpdatesButton.setColour(juce::TextButton::buttonColourId,
-                                        juce::Colours::white.withAlpha(0.035f));
-        checkForUpdatesButton.setColour(juce::TextButton::buttonOnColourId,
-                                        juce::Colours::white.withAlpha(0.08f));
-        checkForUpdatesButton.setColour(juce::TextButton::textColourOffId,
-                                        juce::Colours::white);
+    addAndMakeVisible(checkForUpdatesButton);
+    checkForUpdatesButton.onClick = [this] { beginUpdateCheck(); };
+    checkForUpdatesButton.getProperties().set("settingsAction", true);
+    checkForUpdatesButton.setColour(juce::TextButton::buttonColourId,
+                                    juce::Colours::white.withAlpha(0.035f));
+    checkForUpdatesButton.setColour(juce::TextButton::buttonOnColourId,
+                                    juce::Colours::white.withAlpha(0.08f));
+    checkForUpdatesButton.setColour(juce::TextButton::textColourOffId,
+                                    juce::Colours::white);
 
-        addAndMakeVisible(updateStatusLabel);
-        updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
-        updateStatusLabel.setColour(juce::Label::textColourId,
-                                    juce::Colours::white.withAlpha(0.62f));
+    addAndMakeVisible(updateStatusLabel);
+    updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
+    updateStatusLabel.setColour(juce::Label::textColourId,
+                                juce::Colours::white.withAlpha(0.62f));
 
     addAndMakeVisible(disclaimerLabel);
-        disclaimerLabel.setColour(juce::Label::textColourId,
-                                  juce::Colours::white.withAlpha(0.55f));
+    disclaimerLabel.setColour(juce::Label::textColourId,
+                              juce::Colours::white.withAlpha(0.55f));
     disclaimerLabel.setJustificationType(juce::Justification::centredLeft);
     disclaimerLabel.setFont(makeHelveticaFont(11.0f));
 
     addAndMakeVisible(disclaimerDetailLabel);
-        disclaimerDetailLabel.setColour(juce::Label::textColourId,
-                                        juce::Colours::white.withAlpha(0.55f));
-    disclaimerDetailLabel.setJustificationType(juce::Justification::centredLeft);
+    disclaimerDetailLabel.setColour(juce::Label::textColourId,
+                                    juce::Colours::white.withAlpha(0.55f));
+    disclaimerDetailLabel.setJustificationType(
+        juce::Justification::centredLeft);
     disclaimerDetailLabel.setFont(makeHelveticaFont(11.0f));
 
     addAndMakeVisible(releasesLinkButton);
@@ -638,7 +649,8 @@ public:
     releasesLinkButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
 
     // Social footer text links
-    auto setupSocialLink = [this](juce::TextButton &btn, const juce::String &url) {
+    auto setupSocialLink = [this](juce::TextButton &btn,
+                                  const juce::String &url) {
       btn.getProperties().set("settingsLink", true);
       btn.onClick = [url] { juce::URL(url).launchInDefaultBrowser(); };
       btn.setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -655,9 +667,11 @@ public:
     setupSocialLink(xLinkButton, "https://x.com/toopazu");
     setupSocialLink(youtubeLinkButton, "https://www.youtube.com/@toopazu");
 
-    for (auto *dot : { &socialDot1, &socialDot2 }) {
-      dot->setText(juce::CharPointer_UTF8("\xc2\xb7"), juce::dontSendNotification);
-      dot->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.35f));
+    for (auto *dot : {&socialDot1, &socialDot2}) {
+      dot->setText(juce::CharPointer_UTF8("\xc2\xb7"),
+                   juce::dontSendNotification);
+      dot->setColour(juce::Label::textColourId,
+                     juce::Colours::white.withAlpha(0.35f));
       dot->setJustificationType(juce::Justification::centred);
       dot->setInterceptsMouseClicks(false, false);
       dot->setFont(makeHelveticaFont(12.0f));
@@ -670,38 +684,39 @@ public:
   ~SettingsOverlay() override { setLookAndFeel(nullptr); }
 
   void paint(juce::Graphics &g) override {
-        g.fillAll(juce::Colour::fromString("#FF7BBED4"));
+    g.fillAll(juce::Colour::fromString("#FF7BBED4"));
 
-        g.setColour(juce::Colours::white.withAlpha(0.10f));
-        const float footerRuleY = static_cast<float>(getHeight() - 146);
-        g.drawLine(30.0f, footerRuleY, static_cast<float>(getWidth() - 30),
-                   footerRuleY, 1.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.10f));
+    const float footerRuleY = static_cast<float>(getHeight() - 146);
+    g.drawLine(30.0f, footerRuleY, static_cast<float>(getWidth() - 30),
+               footerRuleY, 1.0f);
   }
 
   void resized() override {
-        const int leftMargin = 30;
-        const int labelW = 100;
-        const int sliderW = 210;
-        const int rowH = 34;
-        const int rightEdge = getWidth() - 30;
+    const int leftMargin = 30;
+    const int labelW = 100;
+    const int sliderW = 210;
+    const int rowH = 34;
+    const int rightEdge = getWidth() - 30;
 
-        titleGraphic.setBounds(leftMargin, 20, getWidth() - 60, titleAreaHeight);
+    titleGraphic.setBounds(leftMargin, 20, getWidth() - 60, titleAreaHeight);
     closeButton.setBounds(getWidth() - 58, 27, 32, 32);
 
-        int yStart = 108;
-        languageLabel.setBounds(leftMargin, yStart, labelW, rowH);
-        languageButton.setBounds(leftMargin + labelW, yStart, sliderW + 52, rowH);
-        yStart += rowH + 24;
+    int yStart = 108;
+    languageLabel.setBounds(leftMargin, yStart, labelW, rowH);
+    languageButton.setBounds(leftMargin + labelW, yStart, sliderW + 52, rowH);
+    yStart += rowH + 24;
 
-        checkForUpdatesButton.setBounds(leftMargin + labelW, yStart, sliderW + 52,
-                                        rowH);
-        yStart += rowH + 16;
+    checkForUpdatesButton.setBounds(leftMargin + labelW, yStart, sliderW + 52,
+                                    rowH);
+    yStart += rowH + 16;
 
-        updateStatusLabel.setBounds(leftMargin + labelW, yStart, sliderW + 52, 18);
+    updateStatusLabel.setBounds(leftMargin + labelW, yStart, sliderW + 52, 18);
 
-        const int footerY = getHeight() - 118;
-        disclaimerLabel.setBounds(leftMargin, footerY, rightEdge - leftMargin, 16);
-        disclaimerDetailLabel.setBounds(leftMargin, footerY + 18, rightEdge - leftMargin, 16);
+    const int footerY = getHeight() - 118;
+    disclaimerLabel.setBounds(leftMargin, footerY, rightEdge - leftMargin, 16);
+    disclaimerDetailLabel.setBounds(leftMargin, footerY + 18,
+                                    rightEdge - leftMargin, 16);
     releasesLinkButton.setBounds(leftMargin, footerY + 38, 140, 20);
 
     // Social links row at bottom — center aligned
@@ -714,11 +729,13 @@ public:
 
     // First pass: measure total width
     auto measureLink = [&](juce::TextButton &btn) -> int {
-      return static_cast<int>(std::ceil(measureTextWidth(linkFont, btn.getButtonText()))) + 4;
+      return static_cast<int>(
+                 std::ceil(measureTextWidth(linkFont, btn.getButtonText()))) +
+             4;
     };
-    int totalW = measureLink(homepageLinkButton) + dotW
-               + measureLink(xLinkButton) + dotW
-               + measureLink(youtubeLinkButton);
+    int totalW = measureLink(homepageLinkButton) + dotW +
+                 measureLink(xLinkButton) + dotW +
+                 measureLink(youtubeLinkButton);
     int linkX = (getWidth() - totalW) / 2;
 
     // Second pass: place
@@ -740,30 +757,29 @@ public:
   }
 
   void mouseUp(const juce::MouseEvent &event) override {
-        if (!getPanelBounds().contains(event.getPosition())) {
+    if (!getPanelBounds().contains(event.getPosition())) {
       if (onClose)
         onClose();
     }
   }
 
   void setLanguageCode(const juce::String &newLanguageCode) {
-    languageCode = VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
+    languageCode =
+        VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
     applyLocalisation();
   }
 
 private:
-  juce::Rectangle<int> getPanelBounds() const {
-        return getLocalBounds();
-  }
+  juce::Rectangle<int> getPanelBounds() const { return getLocalBounds(); }
 
   void refreshUpdateStatusText() {
     const auto &strings = getStringsForCode(languageCode);
 
     switch (updateStatus) {
     case UpdateStatus::currentVersion:
-      updateStatusLabel.setText(
-          strings.currentVersionPrefix + VocalWidenerProcessor::getVersionTag(),
-          juce::dontSendNotification);
+      updateStatusLabel.setText(strings.currentVersionPrefix +
+                                    VocalWidenerProcessor::getVersionTag(),
+                                juce::dontSendNotification);
       break;
     case UpdateStatus::checking:
       updateStatusLabel.setText(strings.checking, juce::dontSendNotification);
@@ -792,15 +808,14 @@ private:
                  juce::String::fromUTF8("日本語"), true,
                  currentLanguage == UILanguage::japanese);
 
-    auto options = juce::PopupMenu::Options()
-                       .withTargetComponent(languageButton)
-                       .withMinimumWidth(languageButton.getWidth())
-                       .withMaximumNumColumns(1)
-                       .withInitiallySelectedItem(
-                           comboIdForLanguage(currentLanguage))
-                       .withItemThatMustBeVisible(
-                           comboIdForLanguage(currentLanguage))
-                       .withStandardItemHeight(languageButton.getHeight());
+    auto options =
+        juce::PopupMenu::Options()
+            .withTargetComponent(languageButton)
+            .withMinimumWidth(languageButton.getWidth())
+            .withMaximumNumColumns(1)
+            .withInitiallySelectedItem(comboIdForLanguage(currentLanguage))
+            .withItemThatMustBeVisible(comboIdForLanguage(currentLanguage))
+            .withStandardItemHeight(languageButton.getHeight());
 
     juce::Component::SafePointer<SettingsOverlay> safeThis(this);
     menu.showMenuAsync(options, [safeThis](int result) {
@@ -822,12 +837,13 @@ private:
     titleGraphic.setLanguageCode(languageCode);
     closeButton.setTooltip(strings.tooltipCloseSettings);
     languageLabel.setText(strings.language, juce::dontSendNotification);
-    languageButton.setButtonText(
-        languageFromCode(languageCode) == UILanguage::japanese
-            ? juce::String::fromUTF8("日本語")
-            : "English");
+    languageButton.setButtonText(languageFromCode(languageCode) ==
+                                         UILanguage::japanese
+                                     ? juce::String::fromUTF8("日本語")
+                                     : "English");
     checkForUpdatesButton.setButtonText(strings.checkForUpdates);
-    disclaimerLabel.setText(strings.disclaimerLine1, juce::dontSendNotification);
+    disclaimerLabel.setText(strings.disclaimerLine1,
+                            juce::dontSendNotification);
     disclaimerDetailLabel.setText(strings.disclaimerLine2,
                                   juce::dontSendNotification);
     disclaimerLabel.setFont(isJapaneseLanguageCode(languageCode)
@@ -838,11 +854,12 @@ private:
                                       : makeHelveticaFont(11.0f));
     releasesLinkButton.setButtonText(strings.releasesLink);
     homepageLinkButton.setButtonText(
-        isJapaneseLanguageCode(languageCode) ? juce::String::fromUTF8("\u30db\u30fc\u30e0\u30da\u30fc\u30b8")
-                                             : "Homepage");
-    xLinkButton.setButtonText(
-        isJapaneseLanguageCode(languageCode) ? juce::String::fromUTF8("X (旧Twitter)")
-                                             : "Twitter / X");
+        isJapaneseLanguageCode(languageCode)
+            ? juce::String::fromUTF8("\u30db\u30fc\u30e0\u30da\u30fc\u30b8")
+            : "Homepage");
+    xLinkButton.setButtonText(isJapaneseLanguageCode(languageCode)
+                                  ? juce::String::fromUTF8("X (旧Twitter)")
+                                  : "Twitter / X");
     youtubeLinkButton.setButtonText("YouTube");
     refreshUpdateStatusText();
     resized();
@@ -916,8 +933,8 @@ private:
   juce::TextButton youtubeLinkButton;
   juce::Label socialDot1, socialDot2;
   bool isCheckingForUpdates = false;
-  juce::String languageCode {"en"};
-  UpdateStatus updateStatus {UpdateStatus::currentVersion};
+  juce::String languageCode{"en"};
+  UpdateStatus updateStatus{UpdateStatus::currentVersion};
   juce::String latestTag;
 };
 } // namespace
@@ -926,8 +943,7 @@ class TitleComponent : public juce::Component {
 public:
   explicit TitleComponent(VocalWidenerProcessor &processorRef,
                           std::function<juce::String()> getLanguageCodeIn)
-      : processor(processorRef),
-        getLanguageCode(std::move(getLanguageCodeIn)) {
+      : processor(processorRef), getLanguageCode(std::move(getLanguageCodeIn)) {
     setInterceptsMouseClicks(false, false);
   }
 
@@ -937,16 +953,16 @@ public:
 
     const auto titleState = computeTitleState(bounds);
     const auto &strings = getStringsForCode(getLanguageCode());
-    auto font = isJapaneseLanguageCode(getLanguageCode())
-                    ? makeJapaneseTitleFont(32.0f * titleState.scale)
-                    : makeHelveticaFont(32.0f * titleState.scale,
-                                        juce::Font::bold);
-    const juce::String topazWord =
-        titleState.allCaps ? strings.titleLeadingWord.toUpperCase()
-                           : strings.titleLeadingWord;
-    const juce::String panWord =
-        titleState.allCaps ? titleState.trailingWord.toUpperCase()
-                           : titleState.trailingWord;
+    auto font =
+        isJapaneseLanguageCode(getLanguageCode())
+            ? makeJapaneseTitleFont(32.0f * titleState.scale)
+            : makeHelveticaFont(32.0f * titleState.scale, juce::Font::bold);
+    const juce::String topazWord = titleState.allCaps
+                                       ? strings.titleLeadingWord.toUpperCase()
+                                       : strings.titleLeadingWord;
+    const juce::String panWord = titleState.allCaps
+                                     ? titleState.trailingWord.toUpperCase()
+                                     : titleState.trailingWord;
 
     const float wordTopazWidth =
         measureTrackedWord(topazWord, font, titleState.letterTracking);
@@ -964,8 +980,9 @@ public:
     g.reduceClipRegion(clipBounds.getSmallestIntegerContainer());
 
     drawWordWithEffects(g, topazWord, startX, baselineY, font, titleState);
-    drawWordWithEffects(g, panWord, startX + wordTopazWidth + titleState.wordGap,
-                        baselineY, font, titleState);
+    drawWordWithEffects(g, panWord,
+                        startX + wordTopazWidth + titleState.wordGap, baselineY,
+                        font, titleState);
   }
 
 private:
@@ -1020,23 +1037,21 @@ private:
     const auto &strings = getStringsForCode(getLanguageCode());
     const bool maxOutputGain =
         outputGain.value >=
-        (outputGain.max - juce::jmax(0.0001f,
-                                     (outputGain.max - outputGain.min) *
-                                         0.001f));
+        (outputGain.max -
+         juce::jmax(0.0001f, (outputGain.max - outputGain.min) * 0.001f));
     state.allCaps = strings.allowTitleAllCaps && maxOutputGain;
-    state.trailingWord = bypassed ? strings.titleBypassTrailingWord
-                                  : strings.titleTrailingWord;
+    state.trailingWord =
+        bypassed ? strings.titleBypassTrailingWord : strings.titleTrailingWord;
 
     if (isJapaneseLanguageCode(getLanguageCode()) && maxOutputGain)
       state.trailingWord << "!!!";
 
-    state.letterTracking =
-        mapLetterTracking(leftPanAmount.value, rightPanAmount.value, flipPan,
-                          state.scale);
+    state.letterTracking = mapLetterTracking(
+        leftPanAmount.value, rightPanAmount.value, flipPan, state.scale);
 
-    const juce::String topazWord =
-        state.allCaps ? strings.titleLeadingWord.toUpperCase()
-                      : strings.titleLeadingWord;
+    const juce::String topazWord = state.allCaps
+                                       ? strings.titleLeadingWord.toUpperCase()
+                                       : strings.titleLeadingWord;
     const juce::String panWord =
         state.allCaps ? state.trailingWord.toUpperCase() : state.trailingWord;
     auto font = isJapaneseLanguageCode(getLanguageCode())
@@ -1072,14 +1087,14 @@ private:
           juce::jmax(0.001f, outputGain.max - outputGain.defaultValue);
       const float t =
           (outputGain.value - outputGain.defaultValue) / positiveRange;
-      const float eased =
-          static_cast<float>((0.2 * t) + (0.8 * smoothStep(t)));
+      const float eased = static_cast<float>((0.2 * t) + (0.8 * smoothStep(t)));
       return 1.0f + 0.22f * eased;
     }
 
     const float negativeRange =
         juce::jmax(0.001f, outputGain.defaultValue - outputGain.min);
-    const float t = (outputGain.defaultValue - outputGain.value) / negativeRange;
+    const float t =
+        (outputGain.defaultValue - outputGain.value) / negativeRange;
     return 1.0f - 0.09f * static_cast<float>(smoothStep(t));
   }
 
@@ -1096,52 +1111,47 @@ private:
     return -2.35f * scale * compression;
   }
 
-  float mapWordGap(const ParameterInfo &offset, juce::Font font, float areaWidth,
-                   float topazWidth, float panWidth) const {
+  float mapWordGap(const ParameterInfo &offset, juce::Font font,
+                   float areaWidth, float topazWidth, float panWidth) const {
     const float spaceWidth =
         juce::jmax(8.0f, measureTextWidth(font, " ") * 0.95f);
     const float maxGap = juce::jmax(
-        spaceWidth,
-        (areaWidth - (2.0f * titleAreaHorizontalPadding) - topazWidth - panWidth) *
-            0.97f);
+        spaceWidth, (areaWidth - (2.0f * titleAreaHorizontalPadding) -
+                     topazWidth - panWidth) *
+                        0.97f);
     const float compressedGap = juce::jmin(spaceWidth * 0.06f, maxGap);
     const float balancedGap = juce::jmin(spaceWidth * 0.9f, maxGap);
-    const float stableGap =
-        juce::jmin(juce::jmax(balancedGap, balancedGap + (maxGap - balancedGap) * 0.025f),
-                   maxGap);
+    const float stableGap = juce::jmin(
+        juce::jmax(balancedGap, balancedGap + (maxGap - balancedGap) * 0.025f),
+        maxGap);
     const float minimumGap = 0.0f;
 
     const double min = offset.min;
     const double max = offset.max;
-    const double defaultValue = juce::jlimit(min, max, static_cast<double>(offset.defaultValue));
+    const double defaultValue =
+        juce::jlimit(min, max, static_cast<double>(offset.defaultValue));
     const double midpoint = juce::jmap(0.5, min, defaultValue);
-    const double balancedEnd =
-        defaultValue + ((max - defaultValue) * 0.25);
-    const double value = juce::jlimit(min, max, static_cast<double>(offset.value));
+    const double balancedEnd = defaultValue + ((max - defaultValue) * 0.25);
+    const double value =
+        juce::jlimit(min, max, static_cast<double>(offset.value));
 
     if (value <= midpoint)
-      return static_cast<float>(mapSegment(value, min, midpoint, minimumGap,
-                                           compressedGap, [](double t) {
-                                             return std::pow(t, 4.2);
-                                           }));
+      return static_cast<float>(
+          mapSegment(value, min, midpoint, minimumGap, compressedGap,
+                     [](double t) { return std::pow(t, 4.2); }));
     if (value <= defaultValue)
-      return static_cast<float>(mapSegment(value, midpoint, defaultValue,
-                                           compressedGap, balancedGap,
-                                           [](double t) {
-                                             return std::pow(t, 1.8);
-                                           }));
+      return static_cast<float>(
+          mapSegment(value, midpoint, defaultValue, compressedGap, balancedGap,
+                     [](double t) { return std::pow(t, 1.8); }));
     if (value <= balancedEnd)
-      return static_cast<float>(mapSegment(value, defaultValue, balancedEnd,
-                                           balancedGap, stableGap,
-                                           [](double t) {
-                                             return t * t * (3.0 - (2.0 * t));
-                                           }));
+      return static_cast<float>(
+          mapSegment(value, defaultValue, balancedEnd, balancedGap, stableGap,
+                     [](double t) { return t * t * (3.0 - (2.0 * t)); }));
 
-    return static_cast<float>(mapSegment(value, balancedEnd, max, stableGap,
-                                         maxGap, [](double t) {
-                                           return (0.24 * t) +
-                                                  (0.76 * std::pow(t, 2.4));
-                                         }));
+    return static_cast<float>(
+        mapSegment(value, balancedEnd, max, stableGap, maxGap, [](double t) {
+          return (0.24 * t) + (0.76 * std::pow(t, 2.4));
+        }));
   }
 
   float measureTrackedWord(const juce::String &word, juce::Font font,
@@ -1165,23 +1175,24 @@ private:
     return juce::jmax(glyphWidth * 0.58f, glyphWidth + tracking);
   }
 
-  void drawWordWithEffects(juce::Graphics &g, const juce::String &word,
-                           float x, float baselineY, juce::Font font,
+  void drawWordWithEffects(juce::Graphics &g, const juce::String &word, float x,
+                           float baselineY, juce::Font font,
                            const TitleState &state) const {
     const auto mainColour = juce::Colours::white;
 
     if (state.chromaAlpha > 0.0f) {
-      drawTrackedWord(g, word, x - state.chromaOffset, baselineY, font,
-                      juce::Colour::fromFloatRGBA(1.0f, 0.36f, 0.52f,
-                                                  state.chromaAlpha),
-                      state.letterTracking);
-      drawTrackedWord(g, word, x + state.chromaOffset, baselineY, font,
-                      juce::Colour::fromFloatRGBA(0.34f, 0.92f, 1.0f,
-                                                  state.chromaAlpha),
-                      state.letterTracking);
+      drawTrackedWord(
+          g, word, x - state.chromaOffset, baselineY, font,
+          juce::Colour::fromFloatRGBA(1.0f, 0.36f, 0.52f, state.chromaAlpha),
+          state.letterTracking);
+      drawTrackedWord(
+          g, word, x + state.chromaOffset, baselineY, font,
+          juce::Colour::fromFloatRGBA(0.34f, 0.92f, 1.0f, state.chromaAlpha),
+          state.letterTracking);
     }
 
-    drawTrackedWord(g, word, x, baselineY, font, mainColour, state.letterTracking);
+    drawTrackedWord(g, word, x, baselineY, font, mainColour,
+                    state.letterTracking);
   }
 
   void drawTrackedWord(juce::Graphics &g, const juce::String &word, float x,
@@ -1242,11 +1253,11 @@ juce::Font CustomLookAndFeel::getTextButtonFont(juce::TextButton &button,
   const bool japanese = isJapaneseLanguageCode(languageCode);
 
   if (button.getProperties().getWithDefault("settingsClose", false))
-    return japanese ? makeMultilingualSansFont(static_cast<float>(buttonHeight) *
-                                                   0.64f,
-                                               juce::Font::bold)
-                    : makeHelveticaFont(static_cast<float>(buttonHeight) * 0.7f,
-                                        juce::Font::bold);
+    return japanese
+               ? makeMultilingualSansFont(
+                     static_cast<float>(buttonHeight) * 0.64f, juce::Font::bold)
+               : makeHelveticaFont(static_cast<float>(buttonHeight) * 0.7f,
+                                   juce::Font::bold);
 
   if (button.getProperties().getWithDefault("settingsLink", false))
     return japanese ? makeMultilingualSansFont(10.8f)
@@ -1257,52 +1268,54 @@ juce::Font CustomLookAndFeel::getTextButtonFont(juce::TextButton &button,
         juce::FontOptions(static_cast<float>(buttonHeight) * 0.96f));
 
   return japanese
-             ? makeMultilingualSansFont(static_cast<float>(buttonHeight) * 0.46f,
-                                        juce::Font::bold)
+             ? makeMultilingualSansFont(
+                   static_cast<float>(buttonHeight) * 0.46f, juce::Font::bold)
              : makeHelveticaFont(static_cast<float>(buttonHeight) * 0.5f,
                                  juce::Font::bold);
 }
 
 void CustomLookAndFeel::drawButtonBackground(
-    juce::Graphics &g, juce::Button &button, const juce::Colour &backgroundColour,
-    bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
-  if (button.getProperties().getWithDefault("settingsClose", false))
-  {
+    juce::Graphics &g, juce::Button &button,
+    const juce::Colour &backgroundColour, bool shouldDrawButtonAsHighlighted,
+    bool shouldDrawButtonAsDown) {
+  if (button.getProperties().getWithDefault("settingsClose", false)) {
     auto bounds = button.getLocalBounds().toFloat().reduced(3.0f);
     if (shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown) {
-      g.setColour(juce::Colours::white.withAlpha(shouldDrawButtonAsDown ? 0.10f
-                                                                        : 0.05f));
+      g.setColour(juce::Colours::white.withAlpha(
+          shouldDrawButtonAsDown ? 0.10f : 0.05f));
       g.fillRect(bounds);
     }
 
     g.setColour(juce::Colours::white.withAlpha(0.14f));
     g.drawRect(bounds, 1.0f);
 
-    const auto iconBounds = bounds.reduced(bounds.getWidth() * 0.28f,
-                                           bounds.getHeight() * 0.28f);
+    const auto iconBounds =
+        bounds.reduced(bounds.getWidth() * 0.28f, bounds.getHeight() * 0.28f);
     g.setColour(button.findColour(juce::TextButton::textColourOffId)
                     .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.45f));
-    g.drawLine(juce::Line<float>(iconBounds.getTopLeft(),
-                                 iconBounds.getBottomRight()),
-               1.8f);
-    g.drawLine(juce::Line<float>(iconBounds.getBottomLeft(),
-                                 iconBounds.getTopRight()),
-               1.8f);
+    g.drawLine(
+        juce::Line<float>(iconBounds.getTopLeft(), iconBounds.getBottomRight()),
+        1.8f);
+    g.drawLine(
+        juce::Line<float>(iconBounds.getBottomLeft(), iconBounds.getTopRight()),
+        1.8f);
     return;
   }
 
-  if (button.getProperties().getWithDefault("settingsReset", false))
-  {
+  if (button.getProperties().getWithDefault("settingsReset", false)) {
     return;
   }
 
   if (button.getProperties().getWithDefault("settingsLink", false)) {
     if (shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown) {
-      auto font = isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(10.8f)
-                                                       : makeHelveticaFont(11.5f);
+      auto font = isJapaneseLanguageCode(languageCode)
+                      ? makeMultilingualSansFont(10.8f)
+                      : makeHelveticaFont(11.5f);
       float textWidth = measureTextWidth(font, button.getButtonText());
-      float underlineY = button.getLocalBounds().toFloat().getCentreY() + font.getHeight() * 0.42f;
-      g.setColour(juce::Colours::white.withAlpha(shouldDrawButtonAsDown ? 0.65f : 0.50f));
+      float underlineY = button.getLocalBounds().toFloat().getCentreY() +
+                         font.getHeight() * 0.42f;
+      g.setColour(juce::Colours::white.withAlpha(
+          shouldDrawButtonAsDown ? 0.65f : 0.50f));
       g.drawLine(0.0f, underlineY, textWidth, underlineY, 1.0f);
     }
     return;
@@ -1321,12 +1334,12 @@ void CustomLookAndFeel::drawButtonBackground(
     fill = fill.brighter(0.08f);
 
   if (isSettingsAction)
-    fill = juce::Colours::white.withAlpha(shouldDrawButtonAsDown ? 0.06f
-                                                                 : (shouldDrawButtonAsHighlighted ? 0.03f
-                                                                                                  : 0.0f));
+    fill = juce::Colours::white.withAlpha(
+        shouldDrawButtonAsDown
+            ? 0.06f
+            : (shouldDrawButtonAsHighlighted ? 0.03f : 0.0f));
 
-  if (fill.getAlpha() > 0)
-  {
+  if (fill.getAlpha() > 0) {
     g.setColour(fill);
     g.fillRect(bounds);
   }
@@ -1353,13 +1366,14 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
                                        bool shouldDrawButtonAsHighlighted,
                                        bool shouldDrawButtonAsDown) {
   juce::ignoreUnused(shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
-  auto colour =
-      button.findColour(juce::TextButton::textColourOffId).withMultipliedAlpha(
-          button.isEnabled() ? 1.0f : 0.45f);
+  auto colour = button.findColour(juce::TextButton::textColourOffId)
+                    .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.45f);
   g.setColour(colour);
   g.setFont(getTextButtonFont(button, button.getHeight()));
-  const bool isClose = button.getProperties().getWithDefault("settingsClose", false);
-  const bool isReset = button.getProperties().getWithDefault("settingsReset", false);
+  const bool isClose =
+      button.getProperties().getWithDefault("settingsClose", false);
+  const bool isReset =
+      button.getProperties().getWithDefault("settingsReset", false);
   const bool isSettingsAction =
       button.getProperties().getWithDefault("settingsAction", false);
   const bool isSettingsLink =
@@ -1372,9 +1386,9 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
 
   if (isReset) {
     auto iconColour = juce::Colours::white.withAlpha(
-        shouldDrawButtonAsDown ? 0.85f
-                               : (shouldDrawButtonAsHighlighted ? 0.65f
-                                                                : 0.40f));
+        shouldDrawButtonAsDown
+            ? 0.85f
+            : (shouldDrawButtonAsHighlighted ? 0.65f : 0.40f));
     g.setColour(iconColour);
     auto font = getTextButtonFont(button, button.getHeight());
     const auto bounds = button.getLocalBounds().toFloat();
@@ -1384,22 +1398,21 @@ void CustomLookAndFeel::drawButtonText(juce::Graphics &g,
                        scale, scale, bounds.getCentreX(), bounds.getCentreY())
                        .translated(0.0f, shouldDrawButtonAsDown ? 0.5f : 0.0f));
     g.setFont(font);
-    g.drawText(button.getButtonText(), bounds,
-               juce::Justification::centred, false);
+    g.drawText(button.getButtonText(), bounds, juce::Justification::centred,
+               false);
     return;
   }
 
-  const auto justification =
-      (isSettingsAction || isReset) ? juce::Justification::centred
-                       : juce::Justification::centredLeft;
+  const auto justification = (isSettingsAction || isReset)
+                                 ? juce::Justification::centred
+                                 : juce::Justification::centredLeft;
   g.drawText(button.getButtonText(),
              button.getLocalBounds().toFloat().reduced(
-                 (isSettingsAction || isSettingsLink || isReset) ? 0.0f
-                                                      : (isSettingsCombo ? 12.0f
-                                                                         : 12.0f),
+                 (isSettingsAction || isSettingsLink || isReset)
+                     ? 0.0f
+                     : (isSettingsCombo ? 12.0f : 12.0f),
                  0.0f),
-             justification,
-             false);
+             justification, false);
 }
 
 juce::Font CustomLookAndFeel::getPopupMenuFont() {
@@ -1426,8 +1439,9 @@ void CustomLookAndFeel::drawTooltip(juce::Graphics &g, const juce::String &text,
   g.drawRect(0, 0, width, height, 1);
 
   // Multi-line text via TextLayout
-  auto font = isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(12.0f)
-                                                   : makeHelveticaFont(12.5f);
+  auto font = isJapaneseLanguageCode(languageCode)
+                  ? makeMultilingualSansFont(12.0f)
+                  : makeHelveticaFont(12.5f);
   juce::AttributedString attStr;
   attStr.append(text, font, juce::Colours::white);
   attStr.setJustification(juce::Justification::centredLeft);
@@ -1435,20 +1449,22 @@ void CustomLookAndFeel::drawTooltip(juce::Graphics &g, const juce::String &text,
 
   juce::TextLayout layout;
   layout.createLayout(attStr, static_cast<float>(width) - padX * 2.0f);
-  layout.draw(g, juce::Rectangle<float>(padX, padY,
-                                         static_cast<float>(width) - padX * 2.0f,
-                                         static_cast<float>(height) - padY * 2.0f));
+  layout.draw(g, juce::Rectangle<float>(
+                     padX, padY, static_cast<float>(width) - padX * 2.0f,
+                     static_cast<float>(height) - padY * 2.0f));
 }
 
-juce::Rectangle<int> CustomLookAndFeel::getTooltipBounds(
-    const juce::String &tipText, juce::Point<int> screenPos,
-    juce::Rectangle<int> parentArea) {
+juce::Rectangle<int>
+CustomLookAndFeel::getTooltipBounds(const juce::String &tipText,
+                                    juce::Point<int> screenPos,
+                                    juce::Rectangle<int> parentArea) {
   const float padX = 10.0f;
   const float padY = 8.0f;
   const float maxTextWidth = 250.0f;
 
-  auto font = isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(12.0f)
-                                                   : makeHelveticaFont(12.5f);
+  auto font = isJapaneseLanguageCode(languageCode)
+                  ? makeMultilingualSansFont(12.0f)
+                  : makeHelveticaFont(12.5f);
   juce::AttributedString attStr;
   attStr.append(tipText, font, juce::Colours::white);
   attStr.setWordWrap(juce::AttributedString::WordWrap::byWord);
@@ -1456,9 +1472,11 @@ juce::Rectangle<int> CustomLookAndFeel::getTooltipBounds(
   juce::TextLayout layout;
   layout.createLayout(attStr, maxTextWidth);
 
-  const int tipW = juce::jmin(static_cast<int>(std::ceil(layout.getWidth() + padX * 2.0f + 2.0f)),
-                              static_cast<int>(maxTextWidth + padX * 2.0f + 2.0f));
-  const int tipH = static_cast<int>(std::ceil(layout.getHeight() + padY * 2.0f + 2.0f));
+  const int tipW = juce::jmin(
+      static_cast<int>(std::ceil(layout.getWidth() + padX * 2.0f + 2.0f)),
+      static_cast<int>(maxTextWidth + padX * 2.0f + 2.0f));
+  const int tipH =
+      static_cast<int>(std::ceil(layout.getHeight() + padY * 2.0f + 2.0f));
 
   // Position below cursor, clamp to parent area
   int x = screenPos.x;
@@ -1504,8 +1522,8 @@ void CustomLookAndFeel::drawLinearSlider(
 
   g.setColour(juce::Colours::white);
   if (slider.getProperties().getWithDefault("mirrorFill", false)) {
-    float fillX = juce::jlimit(static_cast<float>(x), static_cast<float>(x + width),
-                               sliderPos);
+    float fillX = juce::jlimit(static_cast<float>(x),
+                               static_cast<float>(x + width), sliderPos);
     g.fillRoundedRectangle(fillX, trackY, (x + width) - fillX, trackH, 1.0f);
   } else {
     float fillW = sliderPos - x;
@@ -1542,8 +1560,9 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g,
   g.fillEllipse(thumbX, thumbY, thumbSize, thumbSize);
 
   g.setColour(juce::Colours::white);
-  g.setFont(isJapaneseLanguageCode(languageCode) ? makeMultilingualSansFont(13.0f)
-                                                 : makeHelveticaFont(13.2f));
+  g.setFont(isJapaneseLanguageCode(languageCode)
+                ? makeMultilingualSansFont(13.0f)
+                : makeHelveticaFont(13.2f));
   g.drawText(button.getButtonText(),
              juce::Rectangle<float>(switchRect.getRight() + 8.0f, 0.0f,
                                     bounds.getWidth() - switchW - 8.0f,
@@ -1677,7 +1696,9 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
                                  juce::Colours::transparentBlack);
   advancedToggleButton.setColour(juce::TextButton::textColourOffId,
                                  juce::Colours::white.withAlpha(0.82f));
-  advancedToggleButton.onClick = [this] { setAdvancedExpanded(!advancedExpanded); };
+  advancedToggleButton.onClick = [this] {
+    setAdvancedExpanded(!advancedExpanded);
+  };
 
   addAndMakeVisible(linkPanToggle);
   attLinkPan =
@@ -1729,15 +1750,19 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   addAndMakeVisible(resetDefaultsButton);
   resetDefaultsButton.getProperties().set("settingsReset", true);
   resetDefaultsButton.setButtonText(juce::String::fromUTF8("\xE2\x86\xBA"));
-  resetDefaultsButton.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-  resetDefaultsButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
-  resetDefaultsButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.4f));
+  resetDefaultsButton.setColour(juce::TextButton::buttonColourId,
+                                juce::Colours::transparentBlack);
+  resetDefaultsButton.setColour(juce::TextButton::buttonOnColourId,
+                                juce::Colours::transparentBlack);
+  resetDefaultsButton.setColour(juce::TextButton::textColourOffId,
+                                juce::Colours::white.withAlpha(0.4f));
   resetDefaultsButton.onClick = [this] { resetAllParameters(); };
 
   applyLocalisation();
   updateAdvancedVisibility();
   updateHaasCompVisualState(
-      audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
+      audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) >
+          0.5f &&
       audioProcessor.linkPanParam->load(std::memory_order_relaxed) > 0.5f);
   updatePanUnitLabels(
       audioProcessor.flipPanParam->load(std::memory_order_relaxed) > 0.5f);
@@ -1763,8 +1788,8 @@ void VocalWidenerEditor::setAdvancedExpanded(bool expanded) {
 
   advancedExpanded = expanded;
   updateAdvancedVisibility();
-  setSize(getWidth(), advancedExpanded ? expandedEditorHeight
-                                       : collapsedEditorHeight);
+  setSize(getWidth(),
+          advancedExpanded ? expandedEditorHeight : collapsedEditorHeight);
 }
 
 void VocalWidenerEditor::refreshAdvancedToggleText() {
@@ -1823,7 +1848,8 @@ void VocalWidenerEditor::applyLocalisation() {
       isJapaneseLanguageCode(currentLanguageCode)
           ? makeMultilingualSansFont(
                 readoutFontHeightForLanguage(currentLanguageCode))
-          : makeHelveticaFont(readoutFontHeightForLanguage(currentLanguageCode));
+          : makeHelveticaFont(
+                readoutFontHeightForLanguage(currentLanguageCode));
 
   offsetLabel.setText(strings.offsetTime, juce::dontSendNotification);
   leftPanLabel.setText(strings.leftPan, juce::dontSendNotification);
@@ -1884,11 +1910,12 @@ void VocalWidenerEditor::updatePanUnitLabels(bool flipPan) {
   rightPanUnitLabel.setText(flipPan ? "L" : "R", juce::dontSendNotification);
 }
 
-juce::String VocalWidenerEditor::findTooltipText(
-    const juce::Component *component) {
-  for (auto *current = component; current != nullptr; current = current->getParentComponent()) {
-    if (auto *tooltipClient =
-            dynamic_cast<juce::SettableTooltipClient *>(const_cast<juce::Component *>(current))) {
+juce::String
+VocalWidenerEditor::findTooltipText(const juce::Component *component) {
+  for (auto *current = component; current != nullptr;
+       current = current->getParentComponent()) {
+    if (auto *tooltipClient = dynamic_cast<juce::SettableTooltipClient *>(
+            const_cast<juce::Component *>(current))) {
       const auto tooltipText = tooltipClient->getTooltip().trim();
       if (tooltipText.isNotEmpty())
         return tooltipText;
@@ -1905,7 +1932,8 @@ juce::Rectangle<int> VocalWidenerEditor::getTooltipDisplayBounds() const {
   return {6, 4, getWidth() - 12, 42};
 }
 
-void VocalWidenerEditor::updateHoveredTooltip(const juce::Component *component) {
+void VocalWidenerEditor::updateHoveredTooltip(
+    const juce::Component *component) {
   const auto newTooltipText = findTooltipText(component);
 
   if (hoveredTooltipText == newTooltipText)
@@ -1930,7 +1958,8 @@ void VocalWidenerEditor::mouseExit(const juce::MouseEvent &event) {
 }
 
 void VocalWidenerEditor::showSettingsPopup() {
-  setSettingsVisible(settingsOverlay != nullptr && !settingsOverlay->isVisible());
+  setSettingsVisible(settingsOverlay != nullptr &&
+                     !settingsOverlay->isVisible());
 }
 
 void VocalWidenerEditor::setSettingsVisible(bool visible) {
@@ -1952,8 +1981,8 @@ void VocalWidenerEditor::timerCallback() {
 
   const auto &strings = getStringsForCode(currentLanguageCode);
 
-  const bool haasEnabled =
-      audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f;
+  const bool haasEnabled = audioProcessor.haasCompEnableParam->load(
+                               std::memory_order_relaxed) > 0.5f;
   const bool linkPanEnabled =
       audioProcessor.linkPanParam->load(std::memory_order_relaxed) > 0.5f;
   const bool effectiveHaasEnabled = haasEnabled && linkPanEnabled;
@@ -1979,16 +2008,16 @@ void VocalWidenerEditor::timerCallback() {
   if (std::abs(dPit) < 0.05f)
     dPit = 0.0f;
 
-  leftReadout.setText(
-      strings.leftChannel + ":\n" + strings.delay + ": " +
-          juce::String::formatted("%+.2f", oDel) + " ms\n" + strings.pitch +
-          ": " + juce::String::formatted("%+.2f", oPit) + " c",
-      juce::dontSendNotification);
-  rightReadout.setText(
-      strings.rightChannel + ":\n" + strings.delay + ": " +
-          juce::String::formatted("%+.2f", dDel) + " ms\n" + strings.pitch +
-          ": " + juce::String::formatted("%+.2f", dPit) + " c",
-      juce::dontSendNotification);
+  leftReadout.setText(strings.leftChannel + ":\n" + strings.delay + ": " +
+                          juce::String::formatted("%+.2f", oDel) + " ms\n" +
+                          strings.pitch + ": " +
+                          juce::String::formatted("%+.2f", oPit) + " c",
+                      juce::dontSendNotification);
+  rightReadout.setText(strings.rightChannel + ":\n" + strings.delay + ": " +
+                           juce::String::formatted("%+.2f", dDel) + " ms\n" +
+                           strings.pitch + ": " +
+                           juce::String::formatted("%+.2f", dPit) + " c",
+                       juce::dontSendNotification);
 
   float earlierPath =
       audioProcessor.earlierPathReadout.load(std::memory_order_relaxed);
@@ -2045,7 +2074,6 @@ void VocalWidenerEditor::paint(juce::Graphics &g) {
     g.drawText(strings.stereoWarning, 0, 0, getWidth(), 30,
                juce::Justification::centred, true);
   }
-
 }
 
 void VocalWidenerEditor::paintOverChildren(juce::Graphics &g) {
@@ -2129,7 +2157,8 @@ void VocalWidenerEditor::resized() {
     yStart += rowH + 12;
 
     centeredToggle.setBounds(leftMargin, yStart, colWidth, colH);
-    haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+    haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth,
+                             colH);
     yStart += colH;
 
     flipPanToggle.setBounds(leftMargin, yStart, colWidth, colH);

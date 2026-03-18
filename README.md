@@ -126,7 +126,7 @@ Click `advanced` to reveal the rest of the controls.
 
 | Toggle | Description |
 | --- | --- |
-| `equal delay` | Centers the timing offset. Instead of delaying only one side, it splits the timing correction so the core signal stays more rhythmically centered. This introduces a little extra latency when enabled. |
+| `equal delay` | Centers the timing offset. Instead of delaying only one side, it splits the timing correction so the core signal stays more rhythmically centered. This introduces a little extra (compensated) latency when enabled. |
 | `link pan` | Links the left and right panning. If this is off, the left and right channels can be panned independently. Honestly, I'm not sure why you would ever want to turn this off. |
 | `flip pan` | Flips the left and right channels. |
 | `haas comp` | Enables or bypasses Haas compensation. |
@@ -140,9 +140,9 @@ Click `advanced` to reveal the rest of the controls.
 
 ### About ADT drift
 
-`adt drift` is based on artificial double tracking. Instead of only delaying one side, it adds tiny pitch movement and timing variation between the left and right channels. The idea is to slightly decorrelate the two sides so they do not line up quite as perfectly, which can help if the basic Haas + pan widening still leaves you with phasing issues.
+`adt drift` is based on artificial double tracking. Instead of only delaying one side, it adds tiny pitch movement and timing variation between the left and right channels. The idea is to slightly decorrelate the two sides so they do not line up quite as perfectly.
 
-It is an experimental feature and subject to change. It is off by default in `advanced` for users who want a closer one-to-one version of the original manual process, and is there for people who want to enable it and adjust it to taste. In the plugin it says to only use this if you have phasing issues, but you can experiment with it and see if it sounds better in your case.
+It is an experimental feature and subject to change. It is off by default in `advanced` for users who want a closer one-to-one version of the original manual process, and is there for people who want to enable it and adjust it to taste. Adds slight (compensated) latency.
 
 ---
 
