@@ -218,6 +218,7 @@ struct LocalizedStrings {
   juce::String linkPan;
   juce::String flipPan;
   juce::String bypass;
+  juce::String advanced;
 
   juce::String tooltipOffset;
   juce::String tooltipLeftPan;
@@ -295,10 +296,11 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "link pan",
       "flip pan",
       "bypass",
+      "advanced",
       "sets the delay between the left and right channels",
       "sets how far left the left voice sits",
       "sets how far right the right voice sits",
-      "adds ADT-style drift and decorrelation between channels",
+      "adds ADT-style drift and decorrelation between channels. You should only use this if you have phasing issues.",
       "balances perceived loudness when channels are delayed",
       "controls the final output volume",
       "offsets delay equally across both channels",
@@ -339,20 +341,21 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("パン"),
       juce::String::fromUTF8("設定"),
       false,
-      juce::String::fromUTF8("オフセット時間"),
+      juce::String::fromUTF8("オフセット"),
       juce::String::fromUTF8("左パン"),
       juce::String::fromUTF8("右パン"),
       juce::String::fromUTF8("ADTドリフト"),
       juce::String::fromUTF8("ハース補正"),
       juce::String::fromUTF8("出力ゲイン"),
-      juce::String::fromUTF8("均等ディレイ"),
+      juce::String::fromUTF8("ディレイ補正"),
       juce::String::fromUTF8("パンリンク"),
       juce::String::fromUTF8("パン反転"),
       juce::String::fromUTF8("バイパス"),
+      juce::String::fromUTF8("エキスパート"),
       juce::String::fromUTF8("左右チャンネルの時間差を設定します"),
       juce::String::fromUTF8("左側の声をどこまで左に置くかを決めます"),
       juce::String::fromUTF8("右側の声をどこまで右に置くかを決めます"),
-      juce::String::fromUTF8("左右チャンネルにADT風の微小ドリフトを加えます"),
+      juce::String::fromUTF8("左右チャンネルにADT風の微小ドリフトを加えます。位相の問題がある場合にだけ使ってください。"),
       juce::String::fromUTF8("時間差で偏って聞こえる音量感を補正します"),
       juce::String::fromUTF8("最終的な出力音量を調整します"),
       juce::String::fromUTF8("左右の時間差を中央基準で扱います"),
@@ -1493,7 +1496,7 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
       [this] { setSettingsVisible(false); });
   addAndMakeVisible(*titleComponent);
   addChildComponent(*settingsOverlay);
-  setSize(430, 580);
+  setSize(430, collapsedEditorHeight);
 
   auto setupSlider = [&](juce::Slider &s, juce::Label &l,
                          const juce::String &text, auto &attachment,
@@ -1594,6 +1597,16 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           audioProcessor.apvts, "bypass", bypassToggle);
 
+  addAndMakeVisible(advancedToggleButton);
+  advancedToggleButton.getProperties().set("settingsLink", true);
+  advancedToggleButton.setColour(juce::TextButton::buttonColourId,
+                                 juce::Colours::transparentBlack);
+  advancedToggleButton.setColour(juce::TextButton::buttonOnColourId,
+                                 juce::Colours::transparentBlack);
+  advancedToggleButton.setColour(juce::TextButton::textColourOffId,
+                                 juce::Colours::white.withAlpha(0.82f));
+  advancedToggleButton.onClick = [this] { setAdvancedExpanded(!advancedExpanded); };
+
   addAndMakeVisible(linkPanToggle);
   attLinkPan =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -1650,6 +1663,7 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   resetDefaultsButton.onClick = [this] { resetAllParameters(); };
 
   applyLocalisation();
+  updateAdvancedVisibility();
   updateHaasCompVisualState(
       audioProcessor.haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
       audioProcessor.linkPanParam->load(std::memory_order_relaxed) > 0.5f);
@@ -1666,6 +1680,52 @@ void VocalWidenerEditor::resetAllParameters() {
     if (auto *ranged = dynamic_cast<juce::RangedAudioParameter *>(param))
       ranged->setValueNotifyingHost(ranged->getDefaultValue());
   }
+}
+
+void VocalWidenerEditor::setAdvancedExpanded(bool expanded) {
+  if (advancedExpanded == expanded)
+    return;
+
+  advancedExpanded = expanded;
+  updateAdvancedVisibility();
+  setSize(getWidth(), advancedExpanded ? expandedEditorHeight
+                                       : collapsedEditorHeight);
+}
+
+void VocalWidenerEditor::refreshAdvancedToggleText() {
+  const auto &strings = getStringsForCode(currentLanguageCode);
+  advancedToggleButton.setButtonText(
+      strings.advanced + juce::String(advancedExpanded ? " v" : " >"));
+}
+
+void VocalWidenerEditor::updateAdvancedVisibility() {
+  auto setAdvancedVisible = [this](juce::Component &component) {
+    component.setVisible(advancedExpanded);
+  };
+
+  setAdvancedVisible(leftPanLabel);
+  setAdvancedVisible(leftPanSlider);
+  setAdvancedVisible(leftPanUnitLabel);
+  setAdvancedVisible(rightPanLabel);
+  setAdvancedVisible(rightPanSlider);
+  setAdvancedVisible(rightPanUnitLabel);
+  setAdvancedVisible(pitchDiffLabel);
+  setAdvancedVisible(pitchDiffSlider);
+  setAdvancedVisible(pitchDiffUnitLabel);
+  setAdvancedVisible(haasCompAmtLabel);
+  setAdvancedVisible(haasCompAmtSlider);
+  setAdvancedVisible(haasCompAmtUnitLabel);
+  setAdvancedVisible(centeredToggle);
+  setAdvancedVisible(linkPanToggle);
+  setAdvancedVisible(flipPanToggle);
+  setAdvancedVisible(haasCompToggle);
+  setAdvancedVisible(leftReadout);
+  setAdvancedVisible(rightReadout);
+  setAdvancedVisible(haasReadout);
+
+  refreshAdvancedToggleText();
+  resized();
+  repaint();
 }
 
 void VocalWidenerEditor::setCurrentLanguageCode(
@@ -1699,6 +1759,7 @@ void VocalWidenerEditor::applyLocalisation() {
   flipPanToggle.setButtonText(strings.flipPan);
   haasCompToggle.setButtonText(strings.haasComp);
   bypassToggle.setButtonText(strings.bypass);
+  refreshAdvancedToggleText();
 
   offsetLabel.setTooltip(strings.tooltipOffset);
   leftPanLabel.setTooltip(strings.tooltipLeftPan);
@@ -1751,6 +1812,9 @@ void VocalWidenerEditor::setSettingsVisible(bool visible) {
   if (settingsOverlay == nullptr)
     return;
 
+  setSize(getWidth(), visible ? settingsEditorHeight
+                              : (advancedExpanded ? expandedEditorHeight
+                                                  : collapsedEditorHeight));
   settingsOverlay->setVisible(visible);
 
   if (visible)
@@ -1882,66 +1946,68 @@ void VocalWidenerEditor::resized() {
   int rowH = 34;
   int leftMargin = 30;
   int unitX = leftMargin + labelW + sliderW + unitLabelGap;
+  int colH = 30;
+  int colWidth = 160;
 
   offsetLabel.setBounds(leftMargin, yStart, labelW, rowH);
   offsetSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
   offsetUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
   yStart += rowH;
 
-  leftPanLabel.setBounds(leftMargin, yStart, labelW, rowH);
-  leftPanSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
-  leftPanUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
-  yStart += rowH;
-
-  rightPanLabel.setBounds(leftMargin, yStart, labelW, rowH);
-  rightPanSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
-  rightPanUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
-  yStart += rowH;
-
-  pitchDiffLabel.setBounds(leftMargin, yStart, labelW, rowH);
-  pitchDiffSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
-  pitchDiffUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
-  yStart += rowH;
-
-  haasCompAmtLabel.setBounds(leftMargin, yStart, labelW, rowH);
-  haasCompAmtSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
-  haasCompAmtUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
-  yStart += rowH;
-
   outGainLabel.setBounds(leftMargin, yStart, labelW, rowH);
   outGainSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
   outGainUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
-  yStart += rowH + 15;
-
-  int colH = 30;
-  int colWidth = 160;
-
-  centeredToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  linkPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
-  yStart += colH;
-
-  flipPanToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
-  yStart += colH;
+  yStart += rowH + 12;
 
   bypassToggle.setBounds(leftMargin, yStart, colWidth, colH);
-  yStart += colH + 20;
+  yStart += colH + 6;
+  advancedToggleButton.setBounds(leftMargin, yStart, 120, 24);
+  yStart += 30;
 
-  leftReadout.setBounds(leftMargin, yStart, 180, 58);
-  rightReadout.setBounds(leftMargin + 180, yStart, 180, 58);
-  yStart += 62;
+  if (advancedExpanded) {
+    leftPanLabel.setBounds(leftMargin, yStart, labelW, rowH);
+    leftPanSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
+    leftPanUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
+    yStart += rowH;
 
-  haasReadout.setBounds(leftMargin, yStart, 360, 48);
+    rightPanLabel.setBounds(leftMargin, yStart, labelW, rowH);
+    rightPanSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
+    rightPanUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
+    yStart += rowH;
+
+    pitchDiffLabel.setBounds(leftMargin, yStart, labelW, rowH);
+    pitchDiffSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
+    pitchDiffUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
+    yStart += rowH;
+
+    haasCompAmtLabel.setBounds(leftMargin, yStart, labelW, rowH);
+    haasCompAmtSlider.setBounds(leftMargin + labelW, yStart, sliderW, rowH);
+    haasCompAmtUnitLabel.setBounds(unitX, yStart, unitLabelWidth, rowH);
+    yStart += rowH + 12;
+
+    centeredToggle.setBounds(leftMargin, yStart, colWidth, colH);
+    linkPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+    yStart += colH;
+
+    flipPanToggle.setBounds(leftMargin, yStart, colWidth, colH);
+    haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+    yStart += colH + 16;
+
+    const int readoutHeight =
+        isJapaneseLanguageCode(currentLanguageCode) ? 62 : 58;
+    const int haasReadoutHeight =
+        isJapaneseLanguageCode(currentLanguageCode) ? 54 : 48;
+
+    leftReadout.setBounds(leftMargin, yStart, 180, readoutHeight);
+    rightReadout.setBounds(leftMargin + 180, yStart, 180, readoutHeight);
+    yStart += readoutHeight + 4;
+
+    haasReadout.setBounds(leftMargin, yStart, 360, haasReadoutHeight);
+  }
 
   const int footerY = getHeight() - 34;
   latencyLabel.setBounds(leftMargin, footerY - 1, 180, 20);
   settingsButton.setBounds(getWidth() - 34, footerY, 18, 18);
   resetDefaultsButton.setBounds(getWidth() - 36, footerY - 26, 22, 22);
   versionLabel.setBounds(getWidth() - 142, footerY - 1, 100, 20);
-
-  if (isJapaneseLanguageCode(currentLanguageCode)) {
-    leftReadout.setBounds(leftMargin, yStart - 63, 180, 62);
-    rightReadout.setBounds(leftMargin + 180, yStart - 63, 180, 62);
-    haasReadout.setBounds(leftMargin, yStart, 360, 54);
-  }
 }

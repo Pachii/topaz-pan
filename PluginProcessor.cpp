@@ -7,6 +7,7 @@ constexpr float haasCompDeadZoneMs = 0.75f;
 constexpr float haasCompMaxEffectiveDelayMs = 20.0f;
 constexpr float haasCompTauMs = 5.0f;
 constexpr float haasCompMaxDbAt100Percent = 2.0f;
+constexpr float haasCompNewToOldPercentScale = 0.3f;
 constexpr float adtMaxSegmentSeconds = 1.25f;
 constexpr float adtSmoothstepPeakSlope = 1.5f;
 }
@@ -82,7 +83,7 @@ VocalWidenerProcessor::createParameterLayout() {
 
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("offsetTime", 1), "offset time", 0.0f, maxOffsetMs,
-      10.0f));
+      15.0f));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("leftPan", 1), "left pan",
       juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f), 100.0f,
@@ -117,7 +118,7 @@ VocalWidenerProcessor::createParameterLayout() {
       juce::ParameterID("haasCompEn", 1), "haas comp", true));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("haasCompAmt", 1), "haas comp amount",
-      juce::NormalisableRange<float>(0.0f, 300.0f, 1.0f), 100.0f,
+      juce::NormalisableRange<float>(0.0f, 500.0f, 1.0f), 100.0f,
       juce::AudioParameterFloatAttributes().withStringFromValueFunction(
           [](float v, int) { return juce::String(juce::roundToInt(v)); })));
 
@@ -263,7 +264,9 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   bool haasEnable = haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
                     linkPanEnabled;
   float haasAmtNorm =
-      haasCompAmtParam->load(std::memory_order_relaxed) / 30.0f;
+      (haasCompAmtParam->load(std::memory_order_relaxed) *
+       haasCompNewToOldPercentScale) /
+      100.0f;
 
   float targetLeftCompDb = 0.0f;
   float targetRightCompDb = 0.0f;
@@ -284,8 +287,8 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                        deltaMs - haasCompDeadZoneMs);
       const float factor = 1.0f - std::exp(-effectiveDeltaMs / haasCompTauMs);
 
-      // The control is intentionally hot: 30% now matches the old 100%
-      // response, and 300% reaches 10x the old scaling at the top end.
+      // Stretch the control so 100% now lands where the old 30% setting was.
+      // The 300% top end therefore reaches roughly the old 90% response.
       const float compDiffDb = factor * haasAmtNorm *
                                haasCompMaxDbAt100Percent *
                                panSeparationWeight;

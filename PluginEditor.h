@@ -88,8 +88,15 @@ public:
     void timerCallback() override;
 
 private:
+    static constexpr int expandedEditorHeight = 630;
+    static constexpr int collapsedEditorHeight = 320;
+    static constexpr int settingsEditorHeight = 520;
+
     void updateHaasCompVisualState(bool enabled);
     void updatePanUnitLabels(bool flipPan);
+    void setAdvancedExpanded(bool expanded);
+    void updateAdvancedVisibility();
+    void refreshAdvancedToggleText();
     void showSettingsPopup();
     void setSettingsVisible(bool visible);
     void setCurrentLanguageCode(const juce::String& languageCode);
@@ -103,6 +110,7 @@ private:
     ShiftSlider offsetSlider, rightPanSlider, pitchDiffSlider, outGainSlider, haasCompAmtSlider;
     MirroredSlider leftPanSlider;
     juce::ToggleButton centeredToggle {"equal delay"}, bypassToggle {"bypass"}, linkPanToggle {"link pan"}, flipPanToggle {"flip pan"}, haasCompToggle {"haas comp"};
+    juce::TextButton advancedToggleButton;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attOffset, attLeftPan, attRightPan, attPitchDiff, attOutGain, attHaasAmt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attCentered, attBypass, attLinkPan, attFlipPan, attHaasEn;
@@ -120,6 +128,7 @@ private:
     juce::TextButton resetDefaultsButton;
     void resetAllParameters();
     juce::String currentLanguageCode { "en" };
+    bool advancedExpanded = false;
     
     // Dynamic readouts
     juce::Label leftReadout, rightReadout, haasReadout;
