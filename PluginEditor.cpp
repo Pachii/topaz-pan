@@ -57,6 +57,19 @@ juce::Font makeEnglishUIFont(float height,
                           height, styleFlags);
 }
 
+juce::String chooseJapaneseUIFontFamily() {
+#if JUCE_MAC
+  return chooseTypeface({"Hiragino Sans", "Hiragino Kaku Gothic ProN",
+                         "Helvetica Neue"});
+#elif JUCE_WINDOWS
+  return chooseTypeface(
+      {"Meiryo UI", "Meiryo", "Yu Gothic UI", "Yu Gothic", "Segoe UI"});
+#else
+  return chooseTypeface({"Noto Sans CJK JP", "Noto Sans JP", "Noto Sans",
+                         "DejaVu Sans", "Liberation Sans"});
+#endif
+}
+
 juce::Font makeMultilingualSansFont(float height,
                                     int styleFlags = juce::Font::plain) {
   const bool bold = (styleFlags & juce::Font::bold) != 0;
@@ -68,20 +81,44 @@ juce::Font makeMultilingualSansFont(float height,
                           height, styleFlags);
 #elif JUCE_WINDOWS
   const auto primary =
-      chooseTypeface({bold ? "Yu Gothic UI Semibold" : "Yu Gothic UI",
-                      "Meiryo UI", "Meiryo", "Segoe UI"});
+      chooseTypeface({"Meiryo UI", "Meiryo",
+                      bold ? "Yu Gothic UI Semibold" : "Yu Gothic UI",
+                      "Yu Gothic", "Segoe UI"});
   return makePlatformFont(primary,
-                          {"Yu Gothic UI", "Meiryo UI", "Meiryo", "Segoe UI",
-                           "Arial Unicode MS", "Arial"},
+                          {"Meiryo UI", "Meiryo", "Yu Gothic UI", "Yu Gothic",
+                           "Segoe UI", "Arial Unicode MS", "Arial"},
                           height, styleFlags);
 #else
   const auto primary = chooseTypeface(
       {bold ? "Noto Sans CJK JP Bold" : "Noto Sans CJK JP Medium",
-       "Noto Sans JP", "Noto Sans", "DejaVu Sans"});
+       "Noto Sans CJK JP", "Noto Sans JP", "Noto Sans", "DejaVu Sans"});
   return makePlatformFont(primary,
                           {"Noto Sans CJK JP", "Noto Sans JP", "Noto Sans",
                            "DejaVu Sans", "Liberation Sans"},
                           height, styleFlags);
+#endif
+}
+
+juce::Font makeJapaneseTitleFont(float height) {
+#if JUCE_MAC
+  return makeMultilingualSansFont(height, juce::Font::bold);
+#elif JUCE_WINDOWS
+  const auto primary =
+      chooseTypeface({"Yu Gothic UI Semibold", "Yu Gothic UI Bold",
+                      "Meiryo UI", "Meiryo", "Segoe UI"});
+  return makePlatformFont(primary,
+                          {"Yu Gothic UI Semibold", "Yu Gothic UI", "Meiryo UI",
+                           "Meiryo", "Segoe UI", "Arial Unicode MS"},
+                          height, juce::Font::plain);
+#else
+  const auto primary =
+      chooseTypeface({"Noto Sans CJK JP Bold", "Noto Sans JP Bold",
+                      "Noto Sans CJK JP", "Noto Sans JP", "Noto Sans"});
+  return makePlatformFont(primary,
+                          {"Noto Sans CJK JP Bold", "Noto Sans JP Bold",
+                           "Noto Sans CJK JP", "Noto Sans JP", "Noto Sans",
+                           "DejaVu Sans", "Liberation Sans"},
+                          height, juce::Font::plain);
 #endif
 }
 
@@ -324,19 +361,19 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "update checks may be incomplete or inaccurate",
       "verify the latest version on the link below:",
       "github releases",
-      "left channel",
-      "right channel",
+      "left voice",
+      "right voice",
       "delay",
       "drift",
       "latency: ",
       "haas precedence: ",
       "off",
       "none",
-      "left",
-      "right",
+      "left voice",
+      "right voice",
       "ambiguous",
-      "left gain",
-      "right gain",
+      "left voice gain",
+      "right voice gain",
       "Warning: Plugin requires mono or stereo input with stereo output."};
 
   static const LocalizedStrings japanese {
@@ -381,19 +418,19 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("更新確認の結果が不完全または不正確な場合があります"),
       juce::String::fromUTF8("必ず下のリンクから最新版も確認してください"),
       "GitHub Releases",
-      juce::String::fromUTF8("左チャンネル"),
-      juce::String::fromUTF8("右チャンネル"),
+      juce::String::fromUTF8("左ボイス"),
+      juce::String::fromUTF8("右ボイス"),
       juce::String::fromUTF8("ディレイ"),
       juce::String::fromUTF8("ドリフト"),
       juce::String::fromUTF8("レイテンシ: "),
       juce::String::fromUTF8("ハース先行: "),
       juce::String::fromUTF8("オフ"),
       juce::String::fromUTF8("なし"),
-      juce::String::fromUTF8("左"),
-      juce::String::fromUTF8("右"),
+      juce::String::fromUTF8("左ボイス"),
+      juce::String::fromUTF8("右ボイス"),
       juce::String::fromUTF8("不明"),
-      juce::String::fromUTF8("左ゲイン"),
-      juce::String::fromUTF8("右ゲイン"),
+      juce::String::fromUTF8("左ボイスゲイン"),
+      juce::String::fromUTF8("右ボイスゲイン"),
       juce::String::fromUTF8(
           "警告: このプラグインはモノラルまたはステレオ入力、ステレオ出力で使用してください。")};
 
@@ -478,6 +515,11 @@ UpdateCheckResult fetchLatestRelease() {
 
 class SettingsTitleComponent : public juce::Component {
 public:
+  void setLanguageCode(const juce::String &newLanguageCode) {
+    languageCode = VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
+    repaint();
+  }
+
   void setText(const juce::String &newText) {
     if (titleText == newText)
       return;
@@ -488,7 +530,9 @@ public:
 
   void paint(juce::Graphics &g) override {
     const auto bounds = getLocalBounds().toFloat();
-    auto font = makeHelveticaFont(32.0f, juce::Font::bold);
+    auto font = isJapaneseLanguageCode(languageCode)
+                    ? makeJapaneseTitleFont(32.0f)
+                    : makeHelveticaFont(32.0f, juce::Font::bold);
     const float baselineY =
         bounds.getCentreY() - (font.getHeight() * 0.5f) + font.getAscent();
 
@@ -508,6 +552,7 @@ public:
   }
 
 private:
+  juce::String languageCode {"en"};
   juce::String titleText {"settings"};
 };
 
@@ -774,6 +819,7 @@ private:
   void applyLocalisation() {
     const auto &strings = getStringsForCode(languageCode);
     titleGraphic.setText(strings.settingsTitle);
+    titleGraphic.setLanguageCode(languageCode);
     closeButton.setTooltip(strings.tooltipCloseSettings);
     languageLabel.setText(strings.language, juce::dontSendNotification);
     languageButton.setButtonText(
@@ -784,6 +830,12 @@ private:
     disclaimerLabel.setText(strings.disclaimerLine1, juce::dontSendNotification);
     disclaimerDetailLabel.setText(strings.disclaimerLine2,
                                   juce::dontSendNotification);
+    disclaimerLabel.setFont(isJapaneseLanguageCode(languageCode)
+                                ? makeMultilingualSansFont(10.8f)
+                                : makeHelveticaFont(11.0f));
+    disclaimerDetailLabel.setFont(isJapaneseLanguageCode(languageCode)
+                                      ? makeMultilingualSansFont(10.8f)
+                                      : makeHelveticaFont(11.0f));
     releasesLinkButton.setButtonText(strings.releasesLink);
     homepageLinkButton.setButtonText(
         isJapaneseLanguageCode(languageCode) ? juce::String::fromUTF8("\u30db\u30fc\u30e0\u30da\u30fc\u30b8")
@@ -885,7 +937,10 @@ public:
 
     const auto titleState = computeTitleState(bounds);
     const auto &strings = getStringsForCode(getLanguageCode());
-    auto font = makeHelveticaFont(32.0f * titleState.scale, juce::Font::bold);
+    auto font = isJapaneseLanguageCode(getLanguageCode())
+                    ? makeJapaneseTitleFont(32.0f * titleState.scale)
+                    : makeHelveticaFont(32.0f * titleState.scale,
+                                        juce::Font::bold);
     const juce::String topazWord =
         titleState.allCaps ? strings.titleLeadingWord.toUpperCase()
                            : strings.titleLeadingWord;
@@ -984,7 +1039,9 @@ private:
                       : strings.titleLeadingWord;
     const juce::String panWord =
         state.allCaps ? state.trailingWord.toUpperCase() : state.trailingWord;
-    auto font = makeHelveticaFont(32.0f * state.scale, juce::Font::bold);
+    auto font = isJapaneseLanguageCode(getLanguageCode())
+                    ? makeJapaneseTitleFont(32.0f * state.scale)
+                    : makeHelveticaFont(32.0f * state.scale, juce::Font::bold);
     const float topazWidth =
         measureTrackedWord(topazWord, font, state.letterTracking);
     const float panWidth =
@@ -1165,6 +1222,14 @@ CustomLookAndFeel::CustomLookAndFeel() {
 
 void CustomLookAndFeel::setLanguageCode(const juce::String &newLanguageCode) {
   languageCode = VocalWidenerProcessor::normaliseLanguageCode(newLanguageCode);
+
+  if (isJapaneseLanguageCode(languageCode)) {
+    const auto japaneseFamily = chooseJapaneseUIFontFamily();
+    if (japaneseFamily.isNotEmpty())
+      setDefaultSansSerifTypefaceName(japaneseFamily);
+  } else {
+    setDefaultSansSerifTypefaceName("Helvetica Neue");
+  }
 }
 
 juce::Font CustomLookAndFeel::getLabelFont(juce::Label &) {
@@ -1754,8 +1819,11 @@ void VocalWidenerEditor::setCurrentLanguageCode(
 void VocalWidenerEditor::applyLocalisation() {
   const auto &strings = getStringsForCode(currentLanguageCode);
   customLookAndFeel.setLanguageCode(currentLanguageCode);
-  const auto readoutFont = makeHelveticaFont(
-      readoutFontHeightForLanguage(currentLanguageCode));
+  const auto readoutFont =
+      isJapaneseLanguageCode(currentLanguageCode)
+          ? makeMultilingualSansFont(
+                readoutFontHeightForLanguage(currentLanguageCode))
+          : makeHelveticaFont(readoutFontHeightForLanguage(currentLanguageCode));
 
   offsetLabel.setText(strings.offsetTime, juce::dontSendNotification);
   leftPanLabel.setText(strings.leftPan, juce::dontSendNotification);

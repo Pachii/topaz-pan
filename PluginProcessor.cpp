@@ -10,6 +10,74 @@ constexpr float haasCompMaxDbAt100Percent = 2.0f;
 constexpr float haasCompNewToOldPercentScale = 0.3f;
 constexpr float adtMaxSegmentSeconds = 1.25f;
 constexpr float adtSmoothstepPeakSlope = 1.5f;
+constexpr double latencyCommitIdleWindowMs = 200.0;
+
+struct HaasCompensationState {
+  float leftCompDb = 0.0f;
+  float rightCompDb = 0.0f;
+  float earlierPath = -1.0f;
+};
+
+struct ProcessActivityGuard {
+  explicit ProcessActivityGuard(std::atomic<int> &counterIn)
+      : counter(counterIn) {
+    counter.fetch_add(1, std::memory_order_acq_rel);
+  }
+
+  ~ProcessActivityGuard() { counter.fetch_sub(1, std::memory_order_acq_rel); }
+
+  std::atomic<int> &counter;
+};
+
+bool isLatencyAffectingParameter(const juce::String &parameterID) {
+  return parameterID == "offsetTime" || parameterID == "centeredTiming" ||
+         parameterID == "pitchDiff";
+}
+
+HaasCompensationState computeHaasCompensationState(
+    float leftDelayMs, float rightDelayMs, bool enabled, float amountNorm,
+    float panSeparationWeight, bool hasMeaningfulPanSeparation) {
+  HaasCompensationState state;
+
+  if (!enabled || !hasMeaningfulPanSeparation)
+    return state;
+
+  const float deltaMs = std::abs(leftDelayMs - rightDelayMs);
+  if (deltaMs <= haasCompDeadZoneMs)
+    return state;
+
+  const float effectiveDeltaMs =
+      juce::jlimit(0.0f, haasCompMaxEffectiveDelayMs - haasCompDeadZoneMs,
+                   deltaMs - haasCompDeadZoneMs);
+  const float factor = 1.0f - std::exp(-effectiveDeltaMs / haasCompTauMs);
+
+  // Stretch the control so 100% now lands where the old 30% setting was.
+  // The 300% top end therefore reaches roughly the old 90% response.
+  const float compDiffDb =
+      factor * amountNorm * haasCompMaxDbAt100Percent * panSeparationWeight;
+
+  // Convert the desired lead-vs-lag differential into constant-power path
+  // gains so the compensation acts like image balancing, not an accidental
+  // loudness knob.
+  const float gainRatio = juce::Decibels::decibelsToGain(compDiffDb);
+  const float earlyGain =
+      std::sqrt(2.0f / (1.0f + (gainRatio * gainRatio)));
+  const float lateGain = gainRatio * earlyGain;
+  const float earlyCompDb = juce::Decibels::gainToDecibels(earlyGain);
+  const float lateCompDb = juce::Decibels::gainToDecibels(lateGain);
+
+  if (leftDelayMs < rightDelayMs) {
+    state.leftCompDb = earlyCompDb;
+    state.rightCompDb = lateCompDb;
+    state.earlierPath = 0.0f;
+  } else if (rightDelayMs < leftDelayMs) {
+    state.leftCompDb = lateCompDb;
+    state.rightCompDb = earlyCompDb;
+    state.earlierPath = 1.0f;
+  }
+
+  return state;
+}
 }
 
 VocalWidenerProcessor::VocalWidenerProcessor()
@@ -40,41 +108,67 @@ VocalWidenerProcessor::VocalWidenerProcessor()
   apvts.addParameterListener("leftPan", this);
   apvts.addParameterListener("rightPan", this);
   apvts.addParameterListener("linkPan", this);
+  apvts.addParameterListener("offsetTime", this);
+  apvts.addParameterListener("centeredTiming", this);
+  apvts.addParameterListener("pitchDiff", this);
 
   setLanguageCode(apvts.state.getProperty(uiLanguageStateKey, "en").toString());
+  syncLinkedPanStateFromParameters(false);
 }
 
 VocalWidenerProcessor::~VocalWidenerProcessor() {
   apvts.removeParameterListener("leftPan", this);
   apvts.removeParameterListener("rightPan", this);
   apvts.removeParameterListener("linkPan", this);
+  apvts.removeParameterListener("offsetTime", this);
+  apvts.removeParameterListener("centeredTiming", this);
+  apvts.removeParameterListener("pitchDiff", this);
 }
 
 void VocalWidenerProcessor::parameterChanged(const juce::String &parameterID,
                                              float newValue) {
-  if (isLinkingPan.exchange(true))
+  if (isLatencyAffectingParameter(parameterID)) {
+    handleLatencyParameterChanged(parameterID, newValue);
     return;
-
-  bool linked = linkPanParam != nullptr &&
-                linkPanParam->load(std::memory_order_relaxed) > 0.5f;
-
-  if (linked) {
-    if (parameterID == "leftPan") {
-      if (auto *p = apvts.getParameter("rightPan"))
-        p->setValueNotifyingHost(p->convertTo0to1(newValue));
-    } else if (parameterID == "rightPan") {
-      if (auto *p = apvts.getParameter("leftPan"))
-        p->setValueNotifyingHost(p->convertTo0to1(newValue));
-    } else if (parameterID == "linkPan") {
-      if (auto *pLeft = apvts.getParameter("leftPan"))
-        if (auto *pRight = apvts.getParameter("rightPan")) {
-          float leftVal = pLeft->convertFrom0to1(pLeft->getValue());
-          pRight->setValueNotifyingHost(pRight->convertTo0to1(leftVal));
-        }
-    }
   }
 
-  isLinkingPan = false;
+  const auto mirroredTarget = static_cast<PanMirrorTarget>(
+      panMirrorWriteTarget.load(std::memory_order_relaxed));
+  if (((parameterID == "leftPan" && mirroredTarget == mirrorLeftPan) ||
+       (parameterID == "rightPan" && mirroredTarget == mirrorRightPan)) &&
+      std::abs(newValue -
+               panMirrorWriteValue.load(std::memory_order_relaxed)) < 0.0001f) {
+    return;
+  }
+
+  const bool linked =
+      parameterID == "linkPan"
+          ? (newValue > 0.5f)
+          : (linkPanParam != nullptr &&
+             linkPanParam->load(std::memory_order_relaxed) > 0.5f);
+
+  if (!linked) {
+    if (parameterID == "leftPan" || parameterID == "rightPan")
+      linkedPanValue.store(newValue, std::memory_order_relaxed);
+
+    pendingPanMirrorTarget.store(noPanMirrorPending, std::memory_order_relaxed);
+    return;
+  }
+
+  if (parameterID == "leftPan") {
+    linkedPanValue.store(newValue, std::memory_order_relaxed);
+    scheduleLinkedPanMirror(mirrorRightPan, newValue);
+  } else if (parameterID == "rightPan") {
+    linkedPanValue.store(newValue, std::memory_order_relaxed);
+    scheduleLinkedPanMirror(mirrorLeftPan, newValue);
+  } else if (parameterID == "linkPan") {
+    const float leftValue =
+        leftPanParam != nullptr
+            ? leftPanParam->load(std::memory_order_relaxed)
+            : 100.0f;
+    linkedPanValue.store(leftValue, std::memory_order_relaxed);
+    scheduleLinkedPanMirror(mirrorRightPan, leftValue);
+  }
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout
@@ -147,52 +241,118 @@ void VocalWidenerProcessor::prepareToPlay(double sampleRate,
                     getTotalNumOutputChannels() == 2);
 
   const float maxVoiceDelayMs =
-      maxCenteredRightDelayMs + maxAdtSharedLatencyMs + 2.0f;
+      maxCenteredRightDelayMs + computeAdtSharedLatencyMs(maxPitchDiffCents) +
+      computeAdtMaxExcursionMs(maxPitchDiffCents) + maxLatencyGuardMs;
   voiceLeft.prepare(sampleRate, maxVoiceDelayMs, 0x13579BDF);
   voiceRight.prepare(sampleRate, maxVoiceDelayMs, 0x2468ACE0);
 
   const int maxLatencySamples =
-      juce::roundToInt((maxReportedLatencyMs * static_cast<float>(sampleRate)) /
+      juce::roundToInt(((computeAdtSharedLatencyMs(maxPitchDiffCents) +
+                         maxOffsetMs) *
+                        static_cast<float>(sampleRate)) /
                        1000.0f);
   dryDelayLeft.prepare(maxLatencySamples);
   dryDelayRight.prepare(maxLatencySamples);
 
-  activeLatencySamples = computeLatencySamples(
-      offsetTimeParam->load(std::memory_order_relaxed),
-      centeredTimingParam->load(std::memory_order_relaxed) > 0.5f,
-      pitchDiffParam->load(std::memory_order_relaxed));
-  pendingLatencySamples.store(activeLatencySamples, std::memory_order_relaxed);
-  dryDelayLeft.setDelaySamples(activeLatencySamples);
-  dryDelayRight.setDelaySamples(activeLatencySamples);
-  setLatencySamples(activeLatencySamples);
-  wasPitchShiftActive =
-      isPitchShiftActive(pitchDiffParam->load(std::memory_order_relaxed));
+  syncLatencyStateFromParameters(true);
+  syncLinkedPanStateFromParameters(false);
 }
 
 void VocalWidenerProcessor::releaseResources() {}
 
+void VocalWidenerProcessor::reset() {
+  voiceLeft.reset();
+  voiceRight.reset();
+
+  if (dryDelayLeft.isPrepared())
+    dryDelayLeft.reset();
+  if (dryDelayRight.isPrepared())
+    dryDelayRight.reset();
+
+  currentLeftCompDb = 0.0f;
+  currentRightCompDb = 0.0f;
+  leftDelayReadout.store(0.0f, std::memory_order_relaxed);
+  rightDelayReadout.store(0.0f, std::memory_order_relaxed);
+  leftPitchReadout.store(0.0f, std::memory_order_relaxed);
+  rightPitchReadout.store(0.0f, std::memory_order_relaxed);
+  earlierPathReadout.store(-1.0f, std::memory_order_relaxed);
+  leftCompReadout.store(0.0f, std::memory_order_relaxed);
+  rightCompReadout.store(0.0f, std::memory_order_relaxed);
+}
+
 void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                          juce::MidiBuffer &midiMessages) {
   juce::ignoreUnused(midiMessages);
+  processAudioBlock(buffer, false);
+}
+
+void VocalWidenerProcessor::processBlockBypassed(
+    juce::AudioBuffer<float> &buffer, juce::MidiBuffer &midiMessages) {
+  juce::ignoreUnused(midiMessages);
+  processAudioBlock(buffer, true);
+}
+
+void VocalWidenerProcessor::processAudioBlock(juce::AudioBuffer<float> &buffer,
+                                              bool forceBypassed) {
   juce::ScopedNoDenormals noDenormals;
+  ProcessActivityGuard processGuard(activeProcessBlockCount);
+  const auto processExit = juce::ScopeGuard([this] {
+    lastProcessBlockEndMs.store(juce::Time::getMillisecondCounterHiRes(),
+                                std::memory_order_relaxed);
+  });
 
   // Fast bypass and Non-Stereo Layout safe exit
   if (!isStereoLayout)
     return;
 
   // Load parameters (Realtime safe)
-  float offsetMs = offsetTimeParam->load(std::memory_order_relaxed);
-  bool centered = centeredTimingParam->load(std::memory_order_relaxed) > 0.5f;
-  bool bypassed = bypassParam->load(std::memory_order_relaxed) > 0.5f;
-  float pDiff = pitchDiffParam->load(std::memory_order_relaxed);
+  const float requestedOffsetMs =
+      offsetTimeParam->load(std::memory_order_relaxed);
+  const bool requestedCentered =
+      centeredTimingParam->load(std::memory_order_relaxed) > 0.5f;
+  const bool parameterBypassed =
+      bypassParam->load(std::memory_order_relaxed) > 0.5f;
+  const bool bypassed = forceBypassed || parameterBypassed;
+  const float requestedPitchDiff =
+      pitchDiffParam->load(std::memory_order_relaxed);
+  const auto committedLatencyState = getCommittedLatencyState();
+  if (committedLatencyState.latencySamples != activeLatencySamples) {
+    activeLatencySamples = committedLatencyState.latencySamples;
+    dryDelayLeft.setDelaySamples(activeLatencySamples);
+    dryDelayRight.setDelaySamples(activeLatencySamples);
+  }
+
+  const int requestedLatencySamples =
+      computeLatencySamples(requestedOffsetMs, requestedCentered,
+                            requestedPitchDiff);
+  float offsetMs = requestedOffsetMs;
+  bool centered = requestedCentered;
+  float pDiff = requestedPitchDiff;
+
+  if (requestedLatencySamples != committedLatencyState.latencySamples) {
+    queueLatencyUpdate(requestedOffsetMs, requestedCentered, requestedPitchDiff,
+                       requestedLatencySamples);
+    offsetMs = committedLatencyState.offsetMs;
+    centered = committedLatencyState.centered;
+    pDiff = committedLatencyState.driftAmountCents;
+  }
+
   const bool pitchShiftActive = isPitchShiftActive(pDiff);
   float gainLinear = juce::Decibels::decibelsToGain(
       outputGainParam->load(std::memory_order_relaxed));
+  const bool linkPanEnabled =
+      linkPanParam->load(std::memory_order_relaxed) > 0.5f;
 
-  const float leftPanAmount =
+  float leftPanAmount =
       juce::jlimit(0.0f, 100.0f, leftPanParam->load(std::memory_order_relaxed));
-  const float rightPanAmount = juce::jlimit(
+  float rightPanAmount = juce::jlimit(
       0.0f, 100.0f, rightPanParam->load(std::memory_order_relaxed));
+  if (linkPanEnabled) {
+    const float linkedPanAmount = juce::jlimit(
+        0.0f, 100.0f, linkedPanValue.load(std::memory_order_relaxed));
+    leftPanAmount = linkedPanAmount;
+    rightPanAmount = linkedPanAmount;
+  }
   const bool flipPan = flipPanParam->load(std::memory_order_relaxed) > 0.5f;
 
   const float panDirection = flipPan ? 1.0f : -1.0f;
@@ -219,115 +379,30 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       juce::jlimit(0.0f, 1.0f, std::abs(rightBalance - leftBalance) * 0.5f);
   const bool hasMeaningfulPanSeparation = panSeparationWeight >= 0.03f;
 
-  const int targetLatencySamples =
-      computeLatencySamples(offsetMs, centered, pDiff);
-  if (targetLatencySamples != activeLatencySamples) {
-    activeLatencySamples = targetLatencySamples;
-    dryDelayLeft.setDelaySamples(targetLatencySamples);
-    dryDelayRight.setDelaySamples(targetLatencySamples);
-    queueLatencyUpdate(targetLatencySamples);
-  }
-
   // Calculate DSP state per path.
-  // In equal-delay mode the host latency compensation does the centering for
-  // us. Reporting half the offset as plugin latency shifts the rest of the mix
-  // later by that amount, so the effective result becomes -offset/2 on the
-  // left and +offset/2 on the right without changing the internal L/R delta.
-  float delayTLeftMs = 0.0f;
-  float delayTRightMs = offsetMs;
-
-  float leftReadoutMs = centered ? -(offsetMs * 0.5f) : 0.0f;
-  float rightReadoutMs = centered ? (offsetMs * 0.5f) : offsetMs;
+  // Equal-delay mode now splits the actual voice delays instead of relying on
+  // host compensation alone. The reported latency stays at the centre point so
+  // bypass and host PDC remain aligned to the perceived middle of the pair.
+  const float delayTLeftMs = centered ? (offsetMs * 0.5f) : 0.0f;
+  const float delayTRightMs =
+      centered ? (offsetMs * 1.5f) : offsetMs;
 
   const auto [leftDriftAmountCents, rightDriftAmountCents] =
       computeVoiceDriftAmounts(pDiff);
   const float sharedAdtLatencyMs = computeAdtSharedLatencyMs(pDiff);
-
-  if (pitchShiftActive != wasPitchShiftActive) {
-    voiceLeft.reset();
-    voiceRight.reset();
-    wasPitchShiftActive = pitchShiftActive;
-  }
-
-  // Update readouts for UI
-  leftDelayReadout.store(leftReadoutMs, std::memory_order_relaxed);
-  rightDelayReadout.store(rightReadoutMs, std::memory_order_relaxed);
-  leftPitchReadout.store(0.0f, std::memory_order_relaxed);
-  rightPitchReadout.store(0.0f, std::memory_order_relaxed);
+  const float readoutReferenceMs =
+      sharedAdtLatencyMs + (centered ? offsetMs : 0.0f);
 
   voiceLeft.configure(delayTLeftMs, sharedAdtLatencyMs, leftDriftAmountCents);
   voiceRight.configure(delayTRightMs, sharedAdtLatencyMs, rightDriftAmountCents);
 
   // Precedence Compensation
-  const bool linkPanEnabled =
-      linkPanParam->load(std::memory_order_relaxed) > 0.5f;
   bool haasEnable = haasCompEnableParam->load(std::memory_order_relaxed) > 0.5f &&
                     linkPanEnabled;
   float haasAmtNorm =
       (haasCompAmtParam->load(std::memory_order_relaxed) *
        haasCompNewToOldPercentScale) /
       100.0f;
-
-  float targetLeftCompDb = 0.0f;
-  float targetRightCompDb = 0.0f;
-  float earlierPath = -1.0f; // Tie
-
-  if (haasEnable) {
-    float deltaMs = std::abs(delayTLeftMs - delayTRightMs);
-    if (deltaMs > haasCompDeadZoneMs &&
-        hasMeaningfulPanSeparation) // Only correct if noticeably different
-    {
-      // Psychoacoustically motivated heuristic:
-      // - ignore sub-millisecond delays, where precedence is not yet a stable
-      //   lead-dominance problem for this use case
-      // - saturate over the first few milliseconds
-      // - stop growing once the delay is well into echo/splitting territory
-      const float effectiveDeltaMs =
-          juce::jlimit(0.0f, haasCompMaxEffectiveDelayMs - haasCompDeadZoneMs,
-                       deltaMs - haasCompDeadZoneMs);
-      const float factor = 1.0f - std::exp(-effectiveDeltaMs / haasCompTauMs);
-
-      // Stretch the control so 100% now lands where the old 30% setting was.
-      // The 300% top end therefore reaches roughly the old 90% response.
-      const float compDiffDb = factor * haasAmtNorm *
-                               haasCompMaxDbAt100Percent *
-                               panSeparationWeight;
-
-      // Convert the desired lead-vs-lag differential into constant-power path
-      // gains so the compensation acts like image balancing, not an accidental
-      // loudness knob.
-      const float gainRatio = juce::Decibels::decibelsToGain(compDiffDb);
-      const float earlyGain =
-          std::sqrt(2.0f / (1.0f + (gainRatio * gainRatio)));
-      const float lateGain = gainRatio * earlyGain;
-      const float earlyCompDb = juce::Decibels::gainToDecibels(earlyGain);
-      const float lateCompDb = juce::Decibels::gainToDecibels(lateGain);
-
-      if (delayTLeftMs < delayTRightMs) {
-        // Left structure is earlier
-        targetLeftCompDb = earlyCompDb;
-        targetRightCompDb = lateCompDb;
-
-        if (std::abs(leftPan - rightPan) < 0.05f)
-          earlierPath = -1.0f;
-        else
-          earlierPath = (leftPan < rightPan) ? 0.0f : 1.0f;
-      } else {
-        // Right structure is earlier
-        targetLeftCompDb = lateCompDb;
-        targetRightCompDb = earlyCompDb;
-
-        if (std::abs(leftPan - rightPan) < 0.05f)
-          earlierPath = -1.0f;
-        else
-          earlierPath = (rightPan < leftPan) ? 0.0f : 1.0f;
-      }
-    }
-  }
-
-  earlierPathReadout.store(earlierPath, std::memory_order_relaxed);
-  leftCompReadout.store(targetLeftCompDb, std::memory_order_relaxed);
-  rightCompReadout.store(targetRightCompDb, std::memory_order_relaxed);
 
   auto *channelL = buffer.getWritePointer(0);
   auto *channelR = buffer.getWritePointer(1);
@@ -343,67 +418,74 @@ void VocalWidenerProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Haas comp smoothing coefficient (~5ms time constant, sample-rate independent)
   const float smoothCoeff = 1.0f - std::exp(-1.0f / (0.005f * static_cast<float>(currentSampleRate)));
+  float displayedLeftCompDb = 0.0f;
+  float displayedRightCompDb = 0.0f;
+  float displayedEarlierPath = -1.0f;
 
   for (int i = 0; i < numSamples; ++i) {
     const float sourceL = inputL[i];
     const float sourceR = inputR != nullptr ? inputR[i] : sourceL;
-    const float monoInput =
-        inputR != nullptr ? (sourceL + sourceR) * 0.5f : sourceL;
     const float dryL = dryDelayLeft.processSample(sourceL);
     const float dryR = dryDelayRight.processSample(sourceR);
 
-    if (bypassed) {
-      channelL[i] = dryL;
-      channelR[i] = dryR;
-      continue;
-    }
+    // Path A (left voice / input)
+    float sA = voiceLeft.processSample(sourceL);
 
-    currentLeftCompDb += (targetLeftCompDb - currentLeftCompDb) * smoothCoeff;
-    currentRightCompDb += (targetRightCompDb - currentRightCompDb) * smoothCoeff;
+    // Path B (right voice / input)
+    float sB = voiceRight.processSample(sourceR);
 
-    float gPrecLeft = juce::Decibels::decibelsToGain(currentLeftCompDb);
-    float gPrecRight = juce::Decibels::decibelsToGain(currentRightCompDb);
+    const auto haasState = computeHaasCompensationState(
+        voiceLeft.getCurrentDelayMs(), voiceRight.getCurrentDelayMs(),
+        haasEnable, haasAmtNorm, panSeparationWeight,
+        hasMeaningfulPanSeparation);
+    currentLeftCompDb += (haasState.leftCompDb - currentLeftCompDb) * smoothCoeff;
+    currentRightCompDb +=
+        (haasState.rightCompDb - currentRightCompDb) * smoothCoeff;
 
-    // 1. Mono conversion
-    float in = monoInput;
+    const float gPrecLeft = juce::Decibels::decibelsToGain(currentLeftCompDb);
+    const float gPrecRight = juce::Decibels::decibelsToGain(currentRightCompDb);
+    sA *= gPrecLeft;
+    sB *= gPrecRight;
 
-    // Path A (Left)
-    float sA = voiceLeft.processSample(in) * gPrecLeft;
-
-    // Path B (Right)
-    float sB = voiceRight.processSample(in) * gPrecRight;
+    displayedLeftCompDb = haasState.leftCompDb;
+    displayedRightCompDb = haasState.rightCompDb;
+    displayedEarlierPath = haasState.earlierPath;
 
     // Pan and Mix
     float outL = (sA * leftPL) + (sB * rightPL);
     float outR = (sA * leftPR) + (sB * rightPR);
 
-    // Output Gain
-    channelL[i] = outL * gainLinear;
-    channelR[i] = outR * gainLinear;
+    if (bypassed) {
+      channelL[i] = dryL;
+      channelR[i] = dryR;
+    } else {
+      // Output Gain
+      channelL[i] = outL * gainLinear;
+      channelR[i] = outR * gainLinear;
+    }
   }
 
+  leftDelayReadout.store(voiceLeft.getCurrentDelayMs() - readoutReferenceMs,
+                         std::memory_order_relaxed);
+  rightDelayReadout.store(voiceRight.getCurrentDelayMs() - readoutReferenceMs,
+                          std::memory_order_relaxed);
   leftPitchReadout.store(
       pitchShiftActive ? voiceLeft.getCurrentDriftCents() : 0.0f,
       std::memory_order_relaxed);
   rightPitchReadout.store(
       pitchShiftActive ? voiceRight.getCurrentDriftCents() : 0.0f,
       std::memory_order_relaxed);
+  earlierPathReadout.store(displayedEarlierPath, std::memory_order_relaxed);
+  leftCompReadout.store(displayedLeftCompDb, std::memory_order_relaxed);
+  rightCompReadout.store(displayedRightCompDb, std::memory_order_relaxed);
 }
 
 bool VocalWidenerProcessor::isPitchShiftActive(float pitchDiffCents) const {
   return std::abs(pitchDiffCents) >= 0.01f;
 }
 
-int VocalWidenerProcessor::computeLatencySamples(float offsetMs, bool centered,
-                                                 float driftAmountCents) const {
-  const float totalLatencyMs =
-      computeAdtSharedLatencyMs(driftAmountCents) +
-      (centered ? (offsetMs * 0.5f) : 0.0f);
-  return juce::roundToInt(
-      (totalLatencyMs * static_cast<float>(currentSampleRate)) / 1000.0f);
-}
-
-float VocalWidenerProcessor::computeAdtSharedLatencyMs(float driftAmountCents) const {
+float VocalWidenerProcessor::computeAdtMaxExcursionMs(
+    float driftAmountCents) const {
   const auto [leftDriftCents, rightDriftCents] =
       computeVoiceDriftAmounts(driftAmountCents);
   const float maxVoiceDriftCents = juce::jmax(leftDriftCents, rightDriftCents);
@@ -416,7 +498,24 @@ float VocalWidenerProcessor::computeAdtSharedLatencyMs(float driftAmountCents) c
   const double excursionSeconds =
       (speedDelta * static_cast<double>(adtMaxSegmentSeconds)) /
       adtSmoothstepPeakSlope;
-  return static_cast<float>((excursionSeconds * 1000.0) + 0.5);
+  return static_cast<float>(excursionSeconds * 1000.0);
+}
+
+int VocalWidenerProcessor::computeLatencySamples(float offsetMs, bool centered,
+                                                 float driftAmountCents) const {
+  const float totalLatencyMs =
+      computeAdtSharedLatencyMs(driftAmountCents) +
+      (centered ? offsetMs : 0.0f);
+  return juce::roundToInt(
+      (totalLatencyMs * static_cast<float>(currentSampleRate)) / 1000.0f);
+}
+
+float VocalWidenerProcessor::computeAdtSharedLatencyMs(float driftAmountCents) const {
+  const float excursionMs = computeAdtMaxExcursionMs(driftAmountCents);
+  if (excursionMs < 0.001f)
+    return 0.0f;
+
+  return excursionMs + 0.5f;
 }
 
 std::pair<float, float> VocalWidenerProcessor::computeVoiceDriftAmounts(
@@ -429,9 +528,103 @@ float VocalWidenerProcessor::getReportedLatencyMs() const {
   if (currentSampleRate <= 0.0)
     return 0.0f;
 
+  const int latencySamples = getCommittedLatencyState().latencySamples;
+
+  return (static_cast<float>(latencySamples) * 1000.0f) /
+         static_cast<float>(currentSampleRate);
+}
+
+double VocalWidenerProcessor::getTailLengthSeconds() const {
+  const double maxTailMs =
+      static_cast<double>(maxCenteredRightDelayMs) +
+      static_cast<double>(computeAdtSharedLatencyMs(maxPitchDiffCents)) +
+      static_cast<double>(computeAdtMaxExcursionMs(maxPitchDiffCents));
+  return maxTailMs /
+         1000.0;
+}
+
+juce::AudioProcessorParameter* VocalWidenerProcessor::getBypassParameter() const {
+  return apvts.getParameter("bypass");
+}
+
+void VocalWidenerProcessor::queueLatencyUpdate(float offsetMs, bool centered,
+                                               float driftAmountCents,
+                                               int latencySamples) {
+  pendingLatencyOffsetMs.store(offsetMs, std::memory_order_relaxed);
+  pendingLatencyCentered.store(centered ? 1 : 0, std::memory_order_relaxed);
+  pendingLatencyDriftAmountCents.store(driftAmountCents,
+                                       std::memory_order_relaxed);
+  pendingLatencySamples.store(latencySamples, std::memory_order_relaxed);
+  pendingLatencyUpdate.store(1, std::memory_order_relaxed);
+  triggerAsyncUpdate();
+}
+
+void VocalWidenerProcessor::handleLatencyParameterChanged(
+    const juce::String &parameterID, float newValue) {
   const float offsetMs =
-      offsetTimeParam != nullptr ? offsetTimeParam->load(std::memory_order_relaxed)
-                                 : 0.0f;
+      parameterID == "offsetTime"
+          ? newValue
+          : (offsetTimeParam != nullptr
+                 ? offsetTimeParam->load(std::memory_order_relaxed)
+                 : 0.0f);
+  const bool centered =
+      parameterID == "centeredTiming"
+          ? (newValue > 0.5f)
+          : (centeredTimingParam != nullptr &&
+             centeredTimingParam->load(std::memory_order_relaxed) > 0.5f);
+  const float driftAmountCents =
+      parameterID == "pitchDiff"
+          ? newValue
+          : (pitchDiffParam != nullptr
+                 ? pitchDiffParam->load(std::memory_order_relaxed)
+                 : 0.0f);
+  const int latencySamples =
+      computeLatencySamples(offsetMs, centered, driftAmountCents);
+  const auto committedLatencyState = getCommittedLatencyState();
+  const bool matchesCommitted =
+      committedLatencyState.latencySamples == latencySamples &&
+      std::abs(committedLatencyState.offsetMs - offsetMs) < 1.0e-4f &&
+      committedLatencyState.centered == centered &&
+      std::abs(committedLatencyState.driftAmountCents - driftAmountCents) <
+          1.0e-4f;
+  const bool hasPendingLatencyUpdate =
+      pendingLatencyUpdate.load(std::memory_order_relaxed) != 0;
+
+  if (matchesCommitted && !hasPendingLatencyUpdate)
+    return;
+
+  if (canSynchronouslyCommitLatencyChange()) {
+    const juce::ScopedLock callbackLock(getCallbackLock());
+
+    if (canSynchronouslyCommitLatencyChange()) {
+      syncLatencyStateFromParameters(true);
+      return;
+    }
+  }
+
+  queueLatencyUpdate(offsetMs, centered, driftAmountCents, latencySamples);
+}
+
+bool VocalWidenerProcessor::canSynchronouslyCommitLatencyChange() const {
+  if (activeProcessBlockCount.load(std::memory_order_acquire) != 0)
+    return false;
+
+  const double lastBlockEndMs =
+      lastProcessBlockEndMs.load(std::memory_order_relaxed);
+
+  if (lastBlockEndMs <= 0.0)
+    return true;
+
+  return (juce::Time::getMillisecondCounterHiRes() - lastBlockEndMs) >=
+         latencyCommitIdleWindowMs;
+}
+
+void VocalWidenerProcessor::syncLatencyStateFromParameters(
+    bool updateHostLatencyNow) {
+  const float offsetMs =
+      offsetTimeParam != nullptr
+          ? offsetTimeParam->load(std::memory_order_relaxed)
+          : 0.0f;
   const bool centered =
       centeredTimingParam != nullptr &&
       centeredTimingParam->load(std::memory_order_relaxed) > 0.5f;
@@ -442,12 +635,84 @@ float VocalWidenerProcessor::getReportedLatencyMs() const {
   const int latencySamples =
       computeLatencySamples(offsetMs, centered, driftAmountCents);
 
-  return (static_cast<float>(latencySamples) * 1000.0f) /
-         static_cast<float>(currentSampleRate);
+  storeCommittedLatencyState(offsetMs, centered, driftAmountCents,
+                             latencySamples);
+  activeLatencySamples = latencySamples;
+  pendingLatencyUpdate.store(0, std::memory_order_relaxed);
+  pendingLatencySamples.store(latencySamples, std::memory_order_relaxed);
+
+  if (dryDelayLeft.isPrepared())
+    dryDelayLeft.setDelaySamples(latencySamples);
+  if (dryDelayRight.isPrepared())
+    dryDelayRight.setDelaySamples(latencySamples);
+
+  if (updateHostLatencyNow)
+    setLatencySamples(latencySamples);
 }
 
-void VocalWidenerProcessor::queueLatencyUpdate(int latencySamples) {
-  pendingLatencySamples.store(latencySamples, std::memory_order_relaxed);
+VocalWidenerProcessor::LatencyStateSnapshot
+VocalWidenerProcessor::getCommittedLatencyState() const {
+  LatencyStateSnapshot snapshot;
+
+  for (;;) {
+    const auto versionStart =
+        committedLatencyStateVersion.load(std::memory_order_acquire);
+    if ((versionStart & 1u) != 0u)
+      continue;
+
+    snapshot.offsetMs = committedOffsetMs.load(std::memory_order_relaxed);
+    snapshot.centered =
+        committedCentered.load(std::memory_order_relaxed) > 0;
+    snapshot.driftAmountCents =
+        committedDriftAmountCents.load(std::memory_order_relaxed);
+    snapshot.latencySamples =
+        committedLatencySamples.load(std::memory_order_relaxed);
+
+    const auto versionEnd =
+        committedLatencyStateVersion.load(std::memory_order_acquire);
+    if (versionStart == versionEnd)
+      return snapshot;
+  }
+}
+
+void VocalWidenerProcessor::storeCommittedLatencyState(float offsetMs,
+                                                       bool centered,
+                                                       float driftAmountCents,
+                                                       int latencySamples) {
+  committedLatencyStateVersion.fetch_add(1, std::memory_order_acq_rel);
+  committedOffsetMs.store(offsetMs, std::memory_order_relaxed);
+  committedCentered.store(centered ? 1 : 0, std::memory_order_relaxed);
+  committedDriftAmountCents.store(driftAmountCents,
+                                  std::memory_order_relaxed);
+  committedLatencySamples.store(latencySamples, std::memory_order_relaxed);
+  committedLatencyStateVersion.fetch_add(1, std::memory_order_release);
+}
+
+void VocalWidenerProcessor::syncLinkedPanStateFromParameters(
+    bool scheduleMirror) {
+  const float leftValue =
+      leftPanParam != nullptr
+          ? leftPanParam->load(std::memory_order_relaxed)
+          : 100.0f;
+  const bool linked =
+      linkPanParam != nullptr &&
+      linkPanParam->load(std::memory_order_relaxed) > 0.5f;
+
+  linkedPanValue.store(leftValue, std::memory_order_relaxed);
+
+  if (!linked) {
+    pendingPanMirrorTarget.store(noPanMirrorPending, std::memory_order_relaxed);
+    return;
+  }
+
+  if (scheduleMirror)
+    this->scheduleLinkedPanMirror(mirrorRightPan, leftValue);
+}
+
+void VocalWidenerProcessor::scheduleLinkedPanMirror(PanMirrorTarget target,
+                                                    float value) {
+  pendingPanMirrorValue.store(value, std::memory_order_relaxed);
+  pendingPanMirrorTarget.store(target, std::memory_order_relaxed);
   triggerAsyncUpdate();
 }
 
@@ -473,7 +738,48 @@ void VocalWidenerProcessor::setLanguageCode(
 }
 
 void VocalWidenerProcessor::handleAsyncUpdate() {
-  setLatencySamples(pendingLatencySamples.load(std::memory_order_relaxed));
+  if (pendingLatencyUpdate.exchange(0, std::memory_order_relaxed) != 0) {
+    const int latencySamples =
+        pendingLatencySamples.load(std::memory_order_relaxed);
+    const float offsetMs =
+        pendingLatencyOffsetMs.load(std::memory_order_relaxed);
+    const bool centered =
+        pendingLatencyCentered.load(std::memory_order_relaxed) > 0;
+    const float driftAmountCents =
+        pendingLatencyDriftAmountCents.load(std::memory_order_relaxed);
+
+    setLatencySamples(latencySamples);
+    storeCommittedLatencyState(offsetMs, centered, driftAmountCents,
+                               latencySamples);
+  }
+
+  const auto target = static_cast<PanMirrorTarget>(
+      pendingPanMirrorTarget.exchange(noPanMirrorPending,
+                                      std::memory_order_relaxed));
+  if (target == noPanMirrorPending)
+    return;
+
+  const bool linked =
+      linkPanParam != nullptr &&
+      linkPanParam->load(std::memory_order_relaxed) > 0.5f;
+  if (!linked)
+    return;
+
+  auto *parameter =
+      apvts.getParameter(target == mirrorLeftPan ? "leftPan" : "rightPan");
+  if (parameter == nullptr)
+    return;
+
+  const float mirroredValue = juce::jlimit(
+      0.0f, 100.0f, pendingPanMirrorValue.load(std::memory_order_relaxed));
+  const float normalizedValue = parameter->convertTo0to1(mirroredValue);
+  if (std::abs(parameter->getValue() - normalizedValue) < 1.0e-6f)
+    return;
+
+  panMirrorWriteTarget.store(target, std::memory_order_relaxed);
+  panMirrorWriteValue.store(mirroredValue, std::memory_order_relaxed);
+  parameter->setValueNotifyingHost(normalizedValue);
+  panMirrorWriteTarget.store(noPanMirrorPending, std::memory_order_relaxed);
 }
 
 void VocalWidenerProcessor::getStateInformation(juce::MemoryBlock &destData) {
@@ -490,6 +796,8 @@ void VocalWidenerProcessor::setStateInformation(const void *data,
   if (xmlState.get() != nullptr)
     if (xmlState->hasTagName(apvts.state.getType())) {
       apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+      syncLatencyStateFromParameters(true);
+      syncLinkedPanStateFromParameters(true);
       setLanguageCode(apvts.state.getProperty(uiLanguageStateKey, "en")
                           .toString());
     }

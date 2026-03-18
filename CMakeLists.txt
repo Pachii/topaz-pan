@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(topaz_pan VERSION 0.2.0)
+project(topaz_pan VERSION 0.3.0)
 
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)

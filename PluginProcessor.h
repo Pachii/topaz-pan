@@ -24,23 +24,36 @@ namespace dsp_utils
             segmentTargetDelaySamples = 0.0;
             segmentLengthSamples = 0;
             segmentProgressSamples = 0;
+            maxExcursionSamples = 0.0;
             maxDriftCents = 0.0f;
             currentDriftCents = 0.0f;
+            crossfadeFromDelaySamples = 0.0;
+            crossfadeSamplesRemaining = 0;
+            crossfadeSamplesTotal = 0;
+            hasDelayState = false;
         }
 
         void configure(float baseDelayMs, float sharedDelayBaseMs,
                        float maxDriftCentsToUse) {
+            const bool wasDriftActive = maxDriftCents >= 0.01f;
+            const double previousDelaySamples = currentDelaySamples;
             centerDelaySamples =
                 ((baseDelayMs + sharedDelayBaseMs) * fs) / 1000.0;
             maxDriftCents = juce::jmax(0.0f, maxDriftCentsToUse);
 
             if (maxDriftCents < 0.01f) {
+                if (wasDriftActive && hasDelayState &&
+                    std::abs(previousDelaySamples - centerDelaySamples) > 0.001)
+                    startModeCrossfade(previousDelaySamples);
+
                 currentDelaySamples = centerDelaySamples;
                 segmentStartDelaySamples = centerDelaySamples;
                 segmentTargetDelaySamples = centerDelaySamples;
                 segmentLengthSamples = 0;
                 segmentProgressSamples = 0;
                 currentDriftCents = 0.0f;
+                maxExcursionSamples = 0.0;
+                hasDelayState = true;
                 return;
             }
 
@@ -50,14 +63,29 @@ namespace dsp_utils
                 juce::jmax(1.0, maxSpeedDelta * (maxSegmentSeconds * fs) /
                                     smoothstepPeakSlope);
 
-            if (segmentLengthSamples <= 0) {
-                currentDelaySamples = centerDelaySamples;
-                startNewSegment();
-                return;
-            }
-
             const double minDelay = centerDelaySamples - maxExcursionSamples;
             const double maxDelay = centerDelaySamples + maxExcursionSamples;
+
+            const bool driftJustEnabled = !wasDriftActive;
+
+            if (!hasDelayState) {
+                currentDelaySamples = centerDelaySamples;
+                segmentStartDelaySamples = centerDelaySamples;
+                segmentTargetDelaySamples = centerDelaySamples;
+                hasDelayState = true;
+            } else if (driftJustEnabled) {
+                if (std::abs(previousDelaySamples - centerDelaySamples) > 0.001)
+                    startModeCrossfade(previousDelaySamples);
+
+                // Enter ADT from the latency-compensated center point so the
+                // wet path matches the committed shared latency before the
+                // first randomized drift segment begins.
+                currentDelaySamples = centerDelaySamples;
+                segmentStartDelaySamples = centerDelaySamples;
+                segmentTargetDelaySamples = centerDelaySamples;
+                segmentLengthSamples = 0;
+                segmentProgressSamples = 0;
+            }
 
             currentDelaySamples = juce::jlimit(minDelay, maxDelay,
                                                currentDelaySamples);
@@ -65,6 +93,11 @@ namespace dsp_utils
                                                     segmentStartDelaySamples);
             segmentTargetDelaySamples = juce::jlimit(minDelay, maxDelay,
                                                      segmentTargetDelaySamples);
+
+            if (segmentLengthSamples <= 0) {
+                startNewSegment();
+                return;
+            }
         }
 
         float processSample(float in) {
@@ -72,7 +105,8 @@ namespace dsp_utils
             const int bufferSize = buffer.getNumSamples();
             writePtr[writePos] = in;
 
-            if (maxDriftCents < 0.01f && centerDelaySamples <= 0.001) {
+            if (maxDriftCents < 0.01f && centerDelaySamples <= 0.001 &&
+                crossfadeSamplesRemaining <= 0) {
                 writePos = (writePos + 1) % bufferSize;
                 currentDriftCents = 0.0f;
                 return in;
@@ -110,7 +144,43 @@ namespace dsp_utils
                 ++segmentProgressSamples;
             }
 
-            double readPos = static_cast<double>(writePos) - currentDelaySamples;
+            const float primaryOut =
+                readDelayedSample(writePtr, bufferSize, currentDelaySamples);
+            float out = primaryOut;
+
+            if (crossfadeSamplesRemaining > 0) {
+                const float previousOut = readDelayedSample(
+                    writePtr, bufferSize, crossfadeFromDelaySamples);
+                const float progress =
+                    1.0f - (static_cast<float>(crossfadeSamplesRemaining) /
+                            static_cast<float>(crossfadeSamplesTotal));
+                const float fadeOut =
+                    std::cos(progress * juce::MathConstants<float>::halfPi);
+                const float fadeIn =
+                    std::sin(progress * juce::MathConstants<float>::halfPi);
+                out = (previousOut * fadeOut) + (primaryOut * fadeIn);
+                --crossfadeSamplesRemaining;
+            }
+
+            writePos = (writePos + 1) % bufferSize;
+            return out;
+        }
+
+        float getCurrentDriftCents() const { return currentDriftCents; }
+        float getCurrentDelayMs() const {
+            return fs > 0.0
+                       ? static_cast<float>((currentDelaySamples * 1000.0) / fs)
+                       : 0.0f;
+        }
+
+        float getSharedLatencyMs() const {
+            return static_cast<float>((maxExcursionSamples * 1000.0) / fs);
+        }
+
+    private:
+        float readDelayedSample(const float* writePtr, int bufferSize,
+                                double delaySamples) const {
+            double readPos = static_cast<double>(writePos) - delaySamples;
             while (readPos < 0.0)
                 readPos += static_cast<double>(bufferSize);
             while (readPos >= static_cast<double>(bufferSize))
@@ -136,20 +206,18 @@ namespace dsp_utils
             const float c2 = y0 - (2.5f * y1) + (2.0f * y2) - (0.5f * y3);
             const float c3 = (0.5f * (y3 - y0)) + (1.5f * (y1 - y2));
 
-            const float out =
-                ((c3 * frac + c2) * frac + c1) * frac + c0;
-
-            writePos = (writePos + 1) % bufferSize;
-            return out;
+            return ((c3 * frac + c2) * frac + c1) * frac + c0;
         }
 
-        float getCurrentDriftCents() const { return currentDriftCents; }
+        void startModeCrossfade(double fromDelaySamples) {
+            if (fs <= 0.0)
+                return;
 
-        float getSharedLatencyMs() const {
-            return static_cast<float>((maxExcursionSamples * 1000.0) / fs);
+            crossfadeFromDelaySamples = juce::jmax(0.0, fromDelaySamples);
+            crossfadeSamplesTotal =
+                juce::jmax(1, juce::roundToInt((modeCrossfadeMs * fs) / 1000.0));
+            crossfadeSamplesRemaining = crossfadeSamplesTotal;
         }
-
-    private:
         void startNewSegment() {
             if (maxDriftCents < 0.01f || fs <= 0.0) {
                 segmentLengthSamples = 0;
@@ -190,6 +258,7 @@ namespace dsp_utils
 
         static constexpr float minSegmentSeconds = 0.35f;
         static constexpr float maxSegmentSeconds = 1.25f;
+        static constexpr float modeCrossfadeMs = 5.0f;
         static constexpr double smoothstepPeakSlope = 1.5;
 
         juce::AudioBuffer<float> buffer;
@@ -205,6 +274,10 @@ namespace dsp_utils
         int segmentProgressSamples = 0;
         float maxDriftCents = 0.0f;
         float currentDriftCents = 0.0f;
+        double crossfadeFromDelaySamples = 0.0;
+        int crossfadeSamplesRemaining = 0;
+        int crossfadeSamplesTotal = 0;
+        bool hasDelayState = false;
     };
 
     // Circular fraction delay
@@ -270,13 +343,15 @@ public:
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
+    void reset() override;
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
     const juce::String getName() const override { return "topaz pan"; }
-    static juce::String getVersionTag() { return "v0.2.0-alpha"; }
+    static juce::String getVersionTag() { return "v0.3.0-alpha"; }
     static juce::URL getReleasesPageUrl() { return juce::URL("https://github.com/Pachii/topaz-pan/releases"); }
     static juce::URL getLatestReleaseApiUrl() { return juce::URL("https://api.github.com/repos/Pachii/topaz-pan/releases/latest"); }
     static juce::String normaliseLanguageCode(juce::String languageCode);
@@ -286,7 +361,8 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    double getTailLengthSeconds() const override;
+    juce::AudioProcessorParameter* getBypassParameter() const override;
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -314,15 +390,13 @@ public:
     std::atomic<float>* haasCompEnableParam = nullptr;
     std::atomic<float>* haasCompAmtParam = nullptr;
 
-    std::atomic<bool> isLinkingPan {false};
-
     // Readouts for UI
     std::atomic<float> leftDelayReadout {0.0f};
     std::atomic<float> rightDelayReadout {0.0f};
     std::atomic<float> leftPitchReadout {0.0f};
     std::atomic<float> rightPitchReadout {0.0f};
     
-    std::atomic<float> earlierPathReadout {-1.0f}; // 0 = Left, 1 = Right, -1 = Tie
+    std::atomic<float> earlierPathReadout {-1.0f}; // 0 = Left voice, 1 = Right voice, -1 = Tie
     std::atomic<float> leftCompReadout {0.0f};
     std::atomic<float> rightCompReadout {0.0f};
 
@@ -332,9 +406,15 @@ public:
 private:
     static constexpr float maxOffsetMs = 50.0f;
     static constexpr float maxCenteredRightDelayMs = maxOffsetMs * 1.5f;
-    static constexpr float maxAdtSharedLatencyMs = 10.5f;
-    static constexpr float maxReportedLatencyMs =
-        maxAdtSharedLatencyMs + (maxOffsetMs * 0.5f);
+    static constexpr float maxPitchDiffCents = 20.0f;
+    static constexpr float maxLatencyGuardMs = 2.0f;
+
+    enum PanMirrorTarget
+    {
+        noPanMirrorPending = 0,
+        mirrorLeftPan = 1,
+        mirrorRightPan = 2
+    };
 
     class IntegerDelay
     {
@@ -353,6 +433,12 @@ private:
             delaySamples = juce::jlimit(0, buffer.getNumSamples() - 1, newDelaySamples);
         }
 
+        void reset()
+        {
+            buffer.clear();
+            writePos = 0;
+        }
+
         float processSample(float in)
         {
             auto* writePtr = buffer.getWritePointer(0);
@@ -369,27 +455,64 @@ private:
             return out;
         }
 
+        bool isPrepared() const { return buffer.getNumSamples() > 0; }
+
     private:
         juce::AudioBuffer<float> buffer;
         int writePos = 0;
         int delaySamples = 0;
     };
 
+    struct LatencyStateSnapshot
+    {
+        float offsetMs = 0.0f;
+        bool centered = false;
+        float driftAmountCents = 0.0f;
+        int latencySamples = 0;
+    };
+
     void handleAsyncUpdate() override;
+    void processAudioBlock(juce::AudioBuffer<float>& buffer, bool forceBypassed);
+    void handleLatencyParameterChanged(const juce::String& parameterID,
+                                       float newValue);
     int computeLatencySamples(float offsetMs, bool centered,
                               float driftAmountCents) const;
-    void queueLatencyUpdate(int latencySamples);
+    void queueLatencyUpdate(float offsetMs, bool centered,
+                            float driftAmountCents, int latencySamples);
+    bool canSynchronouslyCommitLatencyChange() const;
+    void syncLatencyStateFromParameters(bool updateHostLatencyNow);
+    void syncLinkedPanStateFromParameters(bool scheduleMirror);
+    void scheduleLinkedPanMirror(PanMirrorTarget target, float value);
     bool isPitchShiftActive(float pitchDiffCents) const;
+    float computeAdtMaxExcursionMs(float driftAmountCents) const;
     float computeAdtSharedLatencyMs(float driftAmountCents) const;
     std::pair<float, float> computeVoiceDriftAmounts(float driftAmountCents) const;
+    LatencyStateSnapshot getCommittedLatencyState() const;
+    void storeCommittedLatencyState(float offsetMs, bool centered,
+                                    float driftAmountCents, int latencySamples);
 
     float currentLeftCompDb = 0.0f;
     float currentRightCompDb = 0.0f;
     double currentSampleRate = 44100.0;
-    std::atomic<int> pendingLatencySamples {0};
     int activeLatencySamples = 0;
-    bool wasPitchShiftActive = false;
     juce::String languageCode {"en"};
+    std::atomic<float> linkedPanValue {100.0f};
+    std::atomic<int> pendingPanMirrorTarget {noPanMirrorPending};
+    std::atomic<float> pendingPanMirrorValue {100.0f};
+    std::atomic<int> panMirrorWriteTarget {noPanMirrorPending};
+    std::atomic<float> panMirrorWriteValue {0.0f};
+    std::atomic<uint32_t> committedLatencyStateVersion {0};
+    std::atomic<float> committedOffsetMs {0.0f};
+    std::atomic<int> committedCentered {0};
+    std::atomic<float> committedDriftAmountCents {0.0f};
+    std::atomic<int> committedLatencySamples {0};
+    std::atomic<int> pendingLatencyUpdate {0};
+    std::atomic<float> pendingLatencyOffsetMs {0.0f};
+    std::atomic<int> pendingLatencyCentered {0};
+    std::atomic<float> pendingLatencyDriftAmountCents {0.0f};
+    std::atomic<int> pendingLatencySamples {0};
+    std::atomic<int> activeProcessBlockCount {0};
+    std::atomic<double> lastProcessBlockEndMs {0.0};
 
     dsp_utils::AdtDriftVoice voiceLeft, voiceRight;
     IntegerDelay dryDelayLeft, dryDelayRight;
