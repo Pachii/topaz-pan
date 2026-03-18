@@ -94,6 +94,9 @@ private:
 
     void updateHaasCompVisualState(bool enabled);
     void updatePanUnitLabels(bool flipPan);
+    void updateHoveredTooltip(const juce::Component* component);
+    juce::String findTooltipText(const juce::Component* component);
+    juce::Rectangle<int> getTooltipDisplayBounds() const;
     void setAdvancedExpanded(bool expanded);
     void updateAdvancedVisibility();
     void refreshAdvancedToggleText();
@@ -101,11 +104,13 @@ private:
     void setSettingsVisible(bool visible);
     void setCurrentLanguageCode(const juce::String& languageCode);
     void applyLocalisation();
+    void mouseEnter (const juce::MouseEvent& event) override;
+    void mouseMove (const juce::MouseEvent& event) override;
+    void mouseExit (const juce::MouseEvent& event) override;
 
     VocalWidenerProcessor& audioProcessor;
 
     CustomLookAndFeel customLookAndFeel;
-    juce::TooltipWindow tooltipWindow { this, 700 };
 
     ShiftSlider offsetSlider, rightPanSlider, pitchDiffSlider, outGainSlider, haasCompAmtSlider;
     MirroredSlider leftPanSlider;
@@ -129,6 +134,7 @@ private:
     void resetAllParameters();
     juce::String currentLanguageCode { "en" };
     bool advancedExpanded = false;
+    juce::String hoveredTooltipText;
     
     // Dynamic readouts
     juce::Label leftReadout, rightReadout, haasReadout;

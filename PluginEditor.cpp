@@ -229,6 +229,8 @@ struct LocalizedStrings {
   juce::String tooltipEqualDelay;
   juce::String tooltipLinkPan;
   juce::String tooltipFlipPan;
+  juce::String tooltipHaasToggle;
+  juce::String tooltipBypass;
   juce::String tooltipSettings;
   juce::String tooltipCloseSettings;
   juce::String resetDefaults;
@@ -300,12 +302,14 @@ const LocalizedStrings &getStrings(UILanguage language) {
       "sets the delay between the left and right channels",
       "sets how far left the left voice sits",
       "sets how far right the right voice sits",
-      "adds ADT-style drift and decorrelation between channels. You should only use this if you have phasing issues.",
-      "balances perceived loudness when channels are delayed",
+      "adds ADT-style drift and decorrelation between channels. Experimental feature. Use this only if you have phasing issues.",
+      "controls how strongly the plugin compensates for the perceived level imbalance caused by channel delay. Experimental feature.",
       "controls the final output volume",
-      "offsets delay equally across both channels",
+      "may or may not improve the perceived timing of vocals. Experimental feature. Adds slight latency.",
       "locks both pan amounts together",
       "swaps the left and right pan destinations",
+      "turns Haas compensation on or off. Experimental feature.",
+      "bypasses the entire plugin",
       "settings",
       "close settings",
       "reset defaults",
@@ -352,15 +356,17 @@ const LocalizedStrings &getStrings(UILanguage language) {
       juce::String::fromUTF8("パン反転"),
       juce::String::fromUTF8("バイパス"),
       juce::String::fromUTF8("エキスパート"),
-      juce::String::fromUTF8("左右チャンネルの時間差を設定します"),
-      juce::String::fromUTF8("左側の声をどこまで左に置くかを決めます"),
-      juce::String::fromUTF8("右側の声をどこまで右に置くかを決めます"),
-      juce::String::fromUTF8("左右チャンネルにADT風の微小ドリフトを加えます。位相の問題がある場合にだけ使ってください。"),
-      juce::String::fromUTF8("時間差で偏って聞こえる音量感を補正します"),
-      juce::String::fromUTF8("最終的な出力音量を調整します"),
-      juce::String::fromUTF8("左右の時間差を中央基準で扱います"),
+      juce::String::fromUTF8("左右のチャンネルに付ける時間差を調整します"),
+      juce::String::fromUTF8("左側の音をどれだけ左に配置するかを調整します"),
+      juce::String::fromUTF8("右側の音をどれだけ右に配置するかを調整します"),
+      juce::String::fromUTF8("左右チャンネルに微小なピッチの揺れとタイミングのズレを加えます。実験的機能です。位相感が気になる場合にだけ使ってください。"),
+      juce::String::fromUTF8("時間差で片側が大きく聞こえる印象を、どれだけ補正するかを調整します。実験的機能です。"),
+      juce::String::fromUTF8("最終的な出力レベルを調整します"),
+      juce::String::fromUTF8("ボーカルのタイミング感が改善して聞こえる場合があります。実験的機能です。わずかにレイテンシーが増えます。"),
       juce::String::fromUTF8("左右のパン量を連動させます"),
-      juce::String::fromUTF8("左右のパン先を入れ替えます"),
+      juce::String::fromUTF8("左右の配置を入れ替えます"),
+      juce::String::fromUTF8("ハース補正のオン / オフを切り替えます。実験的機能です。"),
+      juce::String::fromUTF8("プラグイン全体をバイパスします"),
       juce::String::fromUTF8("設定"),
       juce::String::fromUTF8("設定を閉じる"),
       juce::String::fromUTF8("デフォルトに戻す"),
@@ -1484,6 +1490,7 @@ void CustomLookAndFeel::drawToggleButton(juce::Graphics &g,
 VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
     : AudioProcessorEditor(&p), audioProcessor(p) {
   setLookAndFeel(&customLookAndFeel);
+  addMouseListener(this, true);
   currentLanguageCode = audioProcessor.getLanguageCode();
   customLookAndFeel.setLanguageCode(currentLanguageCode);
   titleComponent = std::make_unique<TitleComponent>(
@@ -1673,7 +1680,10 @@ VocalWidenerEditor::VocalWidenerEditor(VocalWidenerProcessor &p)
   startTimerHz(30);
 }
 
-VocalWidenerEditor::~VocalWidenerEditor() { setLookAndFeel(nullptr); }
+VocalWidenerEditor::~VocalWidenerEditor() {
+  removeMouseListener(this);
+  setLookAndFeel(nullptr);
+}
 
 void VocalWidenerEditor::resetAllParameters() {
   for (auto *param : audioProcessor.getParameters()) {
@@ -1770,6 +1780,8 @@ void VocalWidenerEditor::applyLocalisation() {
   centeredToggle.setTooltip(strings.tooltipEqualDelay);
   linkPanToggle.setTooltip(strings.tooltipLinkPan);
   flipPanToggle.setTooltip(strings.tooltipFlipPan);
+  haasCompToggle.setTooltip(strings.tooltipHaasToggle);
+  bypassToggle.setTooltip(strings.tooltipBypass);
   settingsButton.setTooltip(strings.tooltipSettings);
   resetDefaultsButton.setTooltip(strings.tooltipResetDefaults);
 
@@ -1802,6 +1814,51 @@ void VocalWidenerEditor::updateHaasCompVisualState(bool enabled) {
 void VocalWidenerEditor::updatePanUnitLabels(bool flipPan) {
   leftPanUnitLabel.setText(flipPan ? "R" : "L", juce::dontSendNotification);
   rightPanUnitLabel.setText(flipPan ? "L" : "R", juce::dontSendNotification);
+}
+
+juce::String VocalWidenerEditor::findTooltipText(
+    const juce::Component *component) {
+  for (auto *current = component; current != nullptr; current = current->getParentComponent()) {
+    if (auto *tooltipClient =
+            dynamic_cast<juce::SettableTooltipClient *>(const_cast<juce::Component *>(current))) {
+      const auto tooltipText = tooltipClient->getTooltip().trim();
+      if (tooltipText.isNotEmpty())
+        return tooltipText;
+    }
+
+    if (current == this)
+      break;
+  }
+
+  return {};
+}
+
+juce::Rectangle<int> VocalWidenerEditor::getTooltipDisplayBounds() const {
+  return {6, 4, getWidth() - 12, 42};
+}
+
+void VocalWidenerEditor::updateHoveredTooltip(const juce::Component *component) {
+  const auto newTooltipText = findTooltipText(component);
+
+  if (hoveredTooltipText == newTooltipText)
+    return;
+
+  const auto repaintBounds = getTooltipDisplayBounds();
+  hoveredTooltipText = newTooltipText;
+  repaint(repaintBounds);
+}
+
+void VocalWidenerEditor::mouseEnter(const juce::MouseEvent &event) {
+  updateHoveredTooltip(event.originalComponent);
+}
+
+void VocalWidenerEditor::mouseMove(const juce::MouseEvent &event) {
+  updateHoveredTooltip(event.originalComponent);
+}
+
+void VocalWidenerEditor::mouseExit(const juce::MouseEvent &event) {
+  if (event.eventComponent == this)
+    updateHoveredTooltip(nullptr);
 }
 
 void VocalWidenerEditor::showSettingsPopup() {
@@ -1931,6 +1988,24 @@ void VocalWidenerEditor::paintOverChildren(juce::Graphics &g) {
     g.setColour(juce::Colour::fromFloatRGBA(0.78f, 0.79f, 0.80f, 0.22f));
     g.fillRect(getLocalBounds());
   }
+
+  if (hoveredTooltipText.isNotEmpty()) {
+    const auto tooltipBounds = getTooltipDisplayBounds();
+    const auto tooltipColour = juce::Colours::white.withAlpha(0.55f);
+    const auto tooltipFont = isJapaneseLanguageCode(currentLanguageCode)
+                                 ? makeMultilingualSansFont(12.0f)
+                                 : makeHelveticaFont(12.2f);
+
+    juce::AttributedString tooltipText;
+    tooltipText.append(hoveredTooltipText, tooltipFont, tooltipColour);
+    tooltipText.setJustification(juce::Justification::topLeft);
+    tooltipText.setWordWrap(juce::AttributedString::WordWrap::byWord);
+
+    juce::TextLayout tooltipLayout;
+    tooltipLayout.createLayout(tooltipText,
+                               static_cast<float>(tooltipBounds.getWidth()));
+    tooltipLayout.draw(g, tooltipBounds.toFloat());
+  }
 }
 
 void VocalWidenerEditor::resized() {
@@ -1986,11 +2061,11 @@ void VocalWidenerEditor::resized() {
     yStart += rowH + 12;
 
     centeredToggle.setBounds(leftMargin, yStart, colWidth, colH);
-    linkPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+    haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
     yStart += colH;
 
     flipPanToggle.setBounds(leftMargin, yStart, colWidth, colH);
-    haasCompToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
+    linkPanToggle.setBounds(leftMargin + colWidth + 20, yStart, colWidth, colH);
     yStart += colH + 16;
 
     const int readoutHeight =

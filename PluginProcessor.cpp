@@ -95,7 +95,7 @@ VocalWidenerProcessor::createParameterLayout() {
       juce::AudioParameterFloatAttributes().withStringFromValueFunction(
           [](float v, int) { return juce::String(juce::roundToInt(v)); })));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
-      juce::ParameterID("centeredTiming", 1), "equal delay", true));
+      juce::ParameterID("centeredTiming", 1), "equal delay", false));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("pitchDiff", 1), "adt drift",
       juce::NormalisableRange<float>(0.0f, 20.0f, 0.01f), 0.0f,
@@ -115,7 +115,7 @@ VocalWidenerProcessor::createParameterLayout() {
   params.push_back(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID("flipPan", 1), "flip pan", false));
   params.push_back(std::make_unique<juce::AudioParameterBool>(
-      juce::ParameterID("haasCompEn", 1), "haas comp", true));
+      juce::ParameterID("haasCompEn", 1), "haas comp", false));
   params.push_back(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID("haasCompAmt", 1), "haas comp amount",
       juce::NormalisableRange<float>(0.0f, 500.0f, 1.0f), 100.0f,
