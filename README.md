@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  An extremely simple stereo vocal widener plugin.
+  An extremely simple vocal widener plugin.
 </p>
 
 <p align="center">
@@ -39,9 +39,9 @@
 ---
 
 
-A tiny plugin for a very specific job: widening vocal harmonies without the hassle of managing duplicate tracks.
+A tiny plugin for a very specific job: widening vocal harmonies without managing duplicate tracks.
 
-It gives you simple widening based on the Haas effect, micro pitch-shift separation, L/R panning, optional channel volume balance compensation, and a detailed and transparent interface that gives an optimal result just by adding it to your track.
+It gives you Haas-based widening, optional ADT-style drift and decorrelation, L/R panning, optional channel balance compensation, and an `advanced` section for the extra controls.
 
 
 
@@ -77,7 +77,7 @@ There are already plugins that """"do this"""", but they never quite felt like t
 
 The gist of the problem is that there does not seem to be a plugin that literally only duplicates and time shifts the audio, and nothing else. So I decided to make one.
 
-Every parameter clearly shows exactly what it is doing to the audio. There are no hidden modulation tricks or mystery processing. Additional features are available if you want them, but every extra feature can be completely disabled.
+Every parameter clearly shows exactly what it is doing to the audio. There are no hidden modulation tricks or mystery processing. Additional features are available if you want them, but every extra feature can be completely disabled. In fact, every additional feature is off by default for users who want a one-to-one replication of the original process.
 
 That means you can reduce the plugin down to exactly the same result as manually duplicating and nudging the track in your DAW, but without the hassle of managing duplicate tracks.
 
@@ -94,8 +94,8 @@ That means you can reduce the plugin down to exactly the same result as manually
 At a high level, the plugin combines three simple cues:
 
 - a small timing difference
-- a small pitch difference (optional)
 - controlled left/right placement
+- optional level balance compensation
 
 That combination is enough to trick your brain into making harmonies and doubles feel wide.
 
@@ -105,38 +105,44 @@ The "Haas effect" is the main idea behind the widening. If one side arrives a li
 
 ### Haas comp (compensation)
 
-When you delay one channel, it can make the undelayed channel sound louder, creating a perceived imbalance. This control adjusts the volume of the left and right channels simultaneously based on math to keep the image feeling balanced. 
+When you delay one channel, it can make the undelayed channel sound louder, creating a perceived imbalance. This control adjusts the volume of the left and right channels simultaneously based on math to keep the image feeling balanced.
+
+`haas comp` is an experimental feature and subject to change. It is off by default in `advanced` for users who want the basic manual process first, and is there for people who want to enable it and adjust it to taste.
 
 ---
 
 ## Controls
 
+By default, the main screen only shows `offset time`, `output gain`, and `bypass`.
+Click `advanced` to reveal the rest of the controls.
+
 | Control | Description |
 | --- | --- |
-| `offset time` | Sets the Haas delay offset used for width. |
-| `left pan` / `right pan` | Places the two sides in the stereo field. These are linked by default for convenience. |
-| `pitch shift` | Adds subtle pitch difference between channels. See the note below for a disclaimer regarding this feature.|
-| `haas comp` | Balances the volume of the left and right channels to compensate for the Haas effect. |
+| `offset time` | Sets the Haas delay offset used for width. The default is `15 ms`. |
 | `output gain` | Controls final output level. |
+| `left pan` / `right pan` | Places the two sides in the stereo field. These are linked by default for convenience. |
+| `adt drift` | Adds ADT-style drift and decorrelation between channels. Experimental feature, subject to change. Off by default in `advanced`. |
+| `haas comp` | Controls how strongly the plugin compensates for the perceived level imbalance caused by the Haas effect. Experimental feature, subject to change. Off by default in `advanced`. |
 
 | Toggle | Description |
 | --- | --- |
-| `equal delay` | (Experimental feature) Centers the timing offset. Instead of delaying only one side (which may make the vocal feel ever so slightly "late"), it splits the difference so the core signal stays locked to the beat. This may not matter because the offsets are so small anyways. Introduces slightly higher latency when turned on. |
-| `equal pitch shift` | (Experimental feature) Symmetrical detuning. Shifts both channels in opposite directions in order to keep the overall panned vocal more pitch-centered to the original pitch. This may not matter because the pitch shifts are so small anyways. |
+| `equal delay` | Centers the timing offset. Instead of delaying only one side, it splits the timing correction so the core signal stays more rhythmically centered. This introduces a little extra latency when enabled. |
 | `link pan` | Links the left and right panning. If this is off, the left and right channels can be panned independently. Honestly, I'm not sure why you would ever want to turn this off. |
 | `flip pan` | Flips the left and right channels. |
-| `haas comp` | Bypasses the Haas compensation. |
+| `haas comp` | Enables or bypasses Haas compensation. |
 | `bypass` | Bypasses the plugin. |
 
 ### Quick starting point
 
-1. Add topaz pan to the **stereo** vocal track/bus that you want to widen.
-2. Change `offset time` to your liking. A sweet spot range is ~10-25ms.
-3. Done! You do not need to change the defaults of the other settings to get a good result.
+1. Add topaz pan to the vocal track or bus that you want to widen. The plugin accepts mono or stereo input and outputs stereo.
+2. Change `offset time` to your liking. A sweet spot range is still around `10-25 ms`, and the default now starts at `15 ms`.
+3. If you need more control, open `advanced` and adjust pan, ADT drift, or Haas compensation.
 
-### About pitch shift
+### About ADT drift
 
-I believe that the simple pitch shifting algorithm used in this plugin (and many others) is not optimal and can create phasing issues. Therefore, I recommend to either leave pitch shifting at 0 or a very small amount, and always solo the track if using pitch shift to check for any issues. I will work on a better algorithm in the future.
+`adt drift` is based on artificial double tracking. Instead of only delaying one side, it adds tiny pitch movement and timing variation between the left and right channels. The idea is to slightly decorrelate the two sides so they do not line up quite as perfectly, which can help if the basic Haas + pan widening still leaves you with phasing issues.
+
+It is an experimental feature and subject to change. It is off by default in `advanced` for users who want a closer one-to-one version of the original manual process, and is there for people who want to enable it and adjust it to taste. If things already sound clean, leave it at `0`.
 
 ---
 
@@ -178,7 +184,7 @@ JUCE is fetched automatically during configure in the current setup.
 
 ```bash
 cmake -S . -B build
-cmake --build build --config Release
+cmake --build build
 ```
 
 ### Requirements
